@@ -1,0 +1,16 @@
+[package]
+name = "ghostwire"
+version = "0.1.0"
+edition = "2021"
+authors = ["Aegis Platform Engineering <platform@aegis.internal>"]
+description = "Zero-Drop L4/L7 Traffic Director & Connection Drainer"
+
+[dependencies]
+tokio = { version = "1.36", features = ["full"] }
+async-trait = "0.1"
+thiserror = "1.0"
+tracing = "0.1"
+serde = { version = "1.0", features = ["derive"] }
+
+[dev-dependencies]
+tokio-test = "0.4"
