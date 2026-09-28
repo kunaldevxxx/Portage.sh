@@ -2,7 +2,7 @@
 
 [![CI Status](https://github.com/kunaldevxxx/Portage.sh/actions/workflows/ci.yml/badge.svg)](https://github.com/kunaldevxxx/Portage.sh/actions/workflows/ci.yml)
 [![Security Audits](https://github.com/kunaldevxxx/Portage.sh/actions/workflows/security.yml/badge.svg)](https://github.com/kunaldevxxx/Portage.sh/actions/workflows/security.yml)
-[![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
+[![License: BSL 1.1](https://img.shields.io/badge/License-BSL%201.1%20(Non--Compete)-red.svg)](LICENSE)
 [![Go Version](https://img.shields.io/badge/Go-1.22%2B-00ADD8?logo=go)](tools/portage/go.mod)
 [![Rust Edition](https://img.shields.io/badge/Rust-2021-DEA584?logo=rust)](Cargo.toml)
 [![Air-Gapped Ready](https://img.shields.io/badge/Sovereign%20Enclaves-FIPS%20140--3%20Verified-success)](#sovereign-air-gapped-compliance)
@@ -19,6 +19,30 @@ The **Portage Platform** eliminates downtime by orchestrating **three mathematic
 1. **Portage.sh (Control & Storage Plane - Go):** Kubernetes Operator executing a resilient 10-phase reconciler, AST-driven manifest modernization (e.g., `extensions/v1beta1` $\rightarrow$ `networking.k8s.io/v1`), CSI volume snapshotting, and sub-second quiescence barriers.
 2. **Synapse-CDC (Data Plane - Safe Rust):** Continuous Write-Ahead Log (WAL) replication engine with bounded ring buffers, backpressure, and cryptographic SHA-256 Merkle-tree state verification ($O(\log N)$ divergence detection).
 3. **Ghostwire (Traffic Plane - Safe Rust):** L4/L7 bidirectional TCP splicing proxy that performs atomic backend route switching and graceful connection draining with **zero dropped packets** and **zero TCP connection resets (`RST`)**.
+
+---
+
+## Open-Core Architecture: Pluggable Driver SPI
+
+The Portage Platform is architected on an **Open-Core foundation**:
+- **Community Edition (Open-Source Core):**
+  - **Kubernetes Operator & 10-Phase Reconciler:** Declarative lifecycle orchestration for stateful container workloads.
+  - **AST Manifest Modernizer:** Automated YAML rewrite engine (`extensions/v1beta1` $\rightarrow$ `networking.k8s.io/v1`, `apps/v1beta1` $\rightarrow$ `apps/v1`).
+  - **Pluggable Driver SPI (`pkg/driver`):** Standard Service Provider Interface allowing dynamic registration of replication and cutover drivers.
+  - **Community Baseline Drivers (`community-cdc`, `community-cutover`):** Built-in drivers for snapshot polling and standard Kubernetes Service selector swaps.
+- **Enterprise Edition (Commercial Engines):**
+  - **Synapse-CDC Driver (`enterprise-synapse`):** Safe Rust continuous WAL replication with bounded ring buffers, backpressure, and cryptographic SHA-256 Merkle-tree state verification ($P < 2^{-256}$).
+  - **Ghostwire Driver (`enterprise-ghostwire`):** Safe Rust L4/L7 bidirectional TCP splicing proxy with atomic backend route swapping and RAII connection draining with **zero connection resets (`RST`)**.
+
+| Feature / Capability | Community Edition (OSS) | Enterprise Edition (Commercial) |
+| :--- | :--- | :--- |
+| **Kubernetes CRDs & Operator** | Included | Included |
+| **AST API Translation Engine** | Included | Included |
+| **Pluggable Driver Registry (SPI)** | Included | Included |
+| **Replication Driver** | `community-cdc` (Snapshot Polling) | `enterprise-synapse` (Continuous WAL + Merkle Proofs) |
+| **Traffic Cutover Driver** | `community-cutover` (Service Selector Swap) | `enterprise-ghostwire` (Zero-RST Kernel TCP Splicer) |
+| **Mathematical State Proof** | Basic Checksum | Cryptographic SHA-256 Merkle Tree ($O(\log N)$) |
+| **Connection Preservation** | Transient Resets | Zero RST Dropped Packets |
 
 ---
 
@@ -233,7 +257,10 @@ cd tools/portage && go test -race -cover -v ./...
 
 ---
 
-## License & Code Ownership
+## License & Commercial Non-Compete Protection
 
-- **License:** Apache License 2.0. See [LICENSE](LICENSE) for details.
+- **License:** **Business Source License 1.1 (BSL 1.1)**. See [LICENSE](LICENSE) for full legal text.
+- **Permitted Uses:** Free for all internal business operations, development, testing, staging, evaluation, academic, and non-commercial purposes.
+- **Commercial Non-Compete Clause:** You may NOT make the platform, its core engines, or any derivative works available to third parties as a hosted service, managed service, cloud offering, SaaS, DBaaS, or as part of any competing commercial migration tool without obtaining an express written commercial enterprise license from the Licensor.
+- **Change Date:** On **October 1, 2028**, this license automatically converts to the standard **Apache License, Version 2.0**.
 - **Repository Maintainer & Code Owner:** [@kunaldevxxx](https://github.com/kunaldevxxx)

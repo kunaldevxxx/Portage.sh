@@ -7,7 +7,13 @@ import (
 	"fmt"
 	"net/http"
 	"time"
+
+	"github.com/aegis-migrate/portage/pkg/driver"
 )
+
+func init() {
+	driver.GlobalRegistry().RegisterReplicationDriver(NewHTTPCDCClient(10 * time.Second))
+}
 
 // CDCClient defines methods to interact with the Synapse-CDC replication engine.
 type CDCClient interface {
@@ -28,6 +34,10 @@ func NewHTTPCDCClient(timeout time.Duration) *HTTPCDCClient {
 	return &HTTPCDCClient{
 		httpClient: &http.Client{Timeout: timeout},
 	}
+}
+
+func (c *HTTPCDCClient) Name() string {
+	return "enterprise-synapse"
 }
 
 type StartReplicationRequest struct {
@@ -134,6 +144,10 @@ type MockCDCClient struct {
 	LagSeconds         int64
 	StartErr           error
 	VerifyErr          error
+}
+
+func (m *MockCDCClient) Name() string {
+	return "mock-cdc"
 }
 
 func (m *MockCDCClient) StartReplication(ctx context.Context, endpoint, streamID string) error {

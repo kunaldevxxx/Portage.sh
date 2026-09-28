@@ -79,20 +79,22 @@ type VolumeMigrationSpec struct {
 
 // CDCReplicationSpec defines integration parameters for Synapse-CDC streaming replication.
 type CDCReplicationSpec struct {
-	Enabled                    bool   `json:"enabled"`
-	Endpoint                   string `json:"endpoint"`
-	StreamID                   string `json:"streamID"`
-	RequireMerkleVerification  bool   `json:"requireMerkleVerification,omitempty"`
-	MaxAllowedLagSeconds       int64  `json:"maxAllowedLagSeconds,omitempty"`
+	Driver                    string `json:"driver,omitempty"`
+	Enabled                   bool   `json:"enabled"`
+	Endpoint                  string `json:"endpoint"`
+	StreamID                  string `json:"streamID"`
+	RequireMerkleVerification bool   `json:"requireMerkleVerification,omitempty"`
+	MaxAllowedLagSeconds      int64  `json:"maxAllowedLagSeconds,omitempty"`
 }
 
 // TrafficCutoverSpec defines integration parameters for Ghostwire zero-drop traffic cutover.
 type TrafficCutoverSpec struct {
-	Enabled              bool   `json:"enabled"`
-	DirectorEndpoint     string `json:"directorEndpoint"`
-	RouteID              string `json:"routeID"`
-	TargetEndpoint       string `json:"targetEndpoint"`
-	DrainTimeoutSeconds  int32  `json:"drainTimeoutSeconds,omitempty"`
+	Driver              string `json:"driver,omitempty"`
+	Enabled             bool   `json:"enabled"`
+	DirectorEndpoint    string `json:"directorEndpoint"`
+	RouteID             string `json:"routeID"`
+	TargetEndpoint      string `json:"targetEndpoint"`
+	DrainTimeoutSeconds int32  `json:"drainTimeoutSeconds,omitempty"`
 }
 
 // PortageMigrationSpec defines the desired state of PortageMigration.

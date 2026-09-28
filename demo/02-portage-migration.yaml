@@ -44,16 +44,18 @@ spec:
           - -c
           - "SELECT pg_backup_stop();"
 
-  # Data Plane: Continuous WAL streaming & Cryptographic Merkle Verification
+  # Data Plane: Continuous WAL streaming & Cryptographic Merkle Verification (Enterprise Synapse-CDC)
   cdcReplication:
+    driver: enterprise-synapse
     enabled: true
     endpoint: "http://synapse-cdc.migration.svc:8080"
     streamID: "postgres-primary-wal"
     requireMerkleVerification: true
     maxAllowedLagSeconds: 2
 
-  # Traffic Plane: Zero-loss traffic cutover & connection draining via Ghostwire
+  # Traffic Plane: Zero-loss traffic cutover & connection draining via Ghostwire (Enterprise Ghostwire)
   trafficCutover:
+    driver: enterprise-ghostwire
     enabled: true
     directorEndpoint: "http://ghostwire.migration.svc:8080"
     routeID: "postgres-db-route"

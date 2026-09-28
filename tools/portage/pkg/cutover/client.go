@@ -7,7 +7,13 @@ import (
 	"fmt"
 	"net/http"
 	"time"
+
+	"github.com/aegis-migrate/portage/pkg/driver"
 )
+
+func init() {
+	driver.GlobalRegistry().RegisterCutoverDriver(NewHTTPCutoverClient(30 * time.Second))
+}
 
 // CutoverClient defines methods to orchestrate traffic redirection via Ghostwire.
 type CutoverClient interface {
@@ -27,6 +33,10 @@ func NewHTTPCutoverClient(timeout time.Duration) *HTTPCutoverClient {
 	return &HTTPCutoverClient{
 		httpClient: &http.Client{Timeout: timeout},
 	}
+}
+
+func (c *HTTPCutoverClient) Name() string {
+	return "enterprise-ghostwire"
 }
 
 type CutoverRequest struct {
@@ -97,6 +107,10 @@ type MockCutoverClient struct {
 	Healthy            bool
 	CutoverErr         error
 	HealthErr          error
+}
+
+func (m *MockCutoverClient) Name() string {
+	return "mock-ghostwire"
 }
 
 func (m *MockCutoverClient) ExecuteCutover(ctx context.Context, directorEndpoint, routeID, targetEndpoint string, drainTimeoutSec int32) error {

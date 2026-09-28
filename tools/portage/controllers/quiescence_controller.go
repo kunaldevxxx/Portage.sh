@@ -20,18 +20,58 @@ import (
 	"github.com/aegis-migrate/portage/pkg/ast"
 	"github.com/aegis-migrate/portage/pkg/cdc"
 	"github.com/aegis-migrate/portage/pkg/cutover"
+	"github.com/aegis-migrate/portage/pkg/driver"
 	"github.com/aegis-migrate/portage/pkg/quiesce"
 )
 
 // PortageMigrationReconciler reconciles a PortageMigration object across all lifecycle phases
 type PortageMigrationReconciler struct {
 	client.Client
-	Scheme        *runtime.Scheme
-	HookExecutor  quiesce.HookExecutor
-	ASTEngine     *ast.ASTTranslationEngine
-	TargetClient  client.Client
-	CDCClient     cdc.CDCClient
-	CutoverClient cutover.CutoverClient
+	Scheme         *runtime.Scheme
+	HookExecutor   quiesce.HookExecutor
+	ASTEngine      *ast.ASTTranslationEngine
+	TargetClient   client.Client
+	CDCClient      cdc.CDCClient
+	CutoverClient  cutover.CutoverClient
+	DriverRegistry *driver.DriverRegistry
+}
+
+func (r *PortageMigrationReconciler) getCDCClient(cdcSpec *v1alpha1.CDCReplicationSpec) (cdc.CDCClient, error) {
+	if r.CDCClient != nil {
+		return r.CDCClient, nil
+	}
+	reg := r.DriverRegistry
+	if reg == nil {
+		reg = driver.GlobalRegistry()
+	}
+	driverName := ""
+	if cdcSpec != nil {
+		driverName = cdcSpec.Driver
+	}
+	d, err := reg.GetReplicationDriver(driverName)
+	if err != nil {
+		return nil, err
+	}
+	return d, nil
+}
+
+func (r *PortageMigrationReconciler) getCutoverClient(cutSpec *v1alpha1.TrafficCutoverSpec) (cutover.CutoverClient, error) {
+	if r.CutoverClient != nil {
+		return r.CutoverClient, nil
+	}
+	reg := r.DriverRegistry
+	if reg == nil {
+		reg = driver.GlobalRegistry()
+	}
+	driverName := ""
+	if cutSpec != nil {
+		driverName = cutSpec.Driver
+	}
+	d, err := reg.GetCutoverDriver(driverName)
+	if err != nil {
+		return nil, err
+	}
+	return d, nil
 }
 
 // +kubebuilder:rbac:groups=migration.portage.sh,resources=portagemigrations,verbs=get;list;watch;create;update;patch;delete
@@ -150,13 +190,17 @@ func (r *PortageMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		logger.Info("Checking data plane stream replication & consistency")
 		if migration.Spec.CDCReplication != nil && migration.Spec.CDCReplication.Enabled {
 			cdcSpec := migration.Spec.CDCReplication
-			if r.CDCClient != nil {
+			cdcClient, err := r.getCDCClient(cdcSpec)
+			if err != nil {
+				return r.triggerRollback(ctx, &migration, fmt.Sprintf("Failed resolving replication driver: %v", err))
+			}
+			if cdcClient != nil {
 				// Start replication if needed
-				_ = r.CDCClient.StartReplication(ctx, cdcSpec.Endpoint, cdcSpec.StreamID)
+				_ = cdcClient.StartReplication(ctx, cdcSpec.Endpoint, cdcSpec.StreamID)
 
 				// Verify Merkle tree consistency if required
 				if cdcSpec.RequireMerkleVerification {
-					verified, rootHash, err := r.CDCClient.VerifyState(ctx, cdcSpec.Endpoint, cdcSpec.StreamID)
+					verified, rootHash, err := cdcClient.VerifyState(ctx, cdcSpec.Endpoint, cdcSpec.StreamID)
 					if err != nil || !verified {
 						logger.Info("Merkle state verification in progress or divergent, retrying", "err", err)
 						return ctrl.Result{RequeueAfter: 3 * time.Second}, nil
@@ -166,7 +210,7 @@ func (r *PortageMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Req
 				}
 
 				// Check lag
-				lag, err := r.CDCClient.GetLag(ctx, cdcSpec.Endpoint, cdcSpec.StreamID)
+				lag, err := cdcClient.GetLag(ctx, cdcSpec.Endpoint, cdcSpec.StreamID)
 				if err == nil {
 					migration.Status.ReplicationLagSeconds = lag
 					if cdcSpec.MaxAllowedLagSeconds > 0 && lag > cdcSpec.MaxAllowedLagSeconds {
@@ -348,19 +392,23 @@ func (r *PortageMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrl.Result{Requeue: true}, r.Status().Update(ctx, &migration)
 
 	case v1alpha1.PhaseCutover:
-		logger.Info("Executing zero-drop traffic cutover via Ghostwire")
+		logger.Info("Executing zero-drop traffic cutover via Ghostwire or Community driver")
 		if migration.Spec.TrafficCutover != nil && migration.Spec.TrafficCutover.Enabled {
 			cutSpec := migration.Spec.TrafficCutover
-			if r.CutoverClient != nil {
+			cutClient, err := r.getCutoverClient(cutSpec)
+			if err != nil {
+				return r.triggerRollback(ctx, &migration, fmt.Sprintf("Failed resolving traffic cutover driver: %v", err))
+			}
+			if cutClient != nil {
 				timeoutSec := cutSpec.DrainTimeoutSeconds
 				if timeoutSec <= 0 {
 					timeoutSec = 30
 				}
-				if err := r.CutoverClient.ExecuteCutover(ctx, cutSpec.DirectorEndpoint, cutSpec.RouteID, cutSpec.TargetEndpoint, timeoutSec); err != nil {
-					return r.triggerRollback(ctx, &migration, fmt.Sprintf("Ghostwire traffic cutover failed: %v", err))
+				if err := cutClient.ExecuteCutover(ctx, cutSpec.DirectorEndpoint, cutSpec.RouteID, cutSpec.TargetEndpoint, timeoutSec); err != nil {
+					return r.triggerRollback(ctx, &migration, fmt.Sprintf("Traffic cutover failed: %v", err))
 				}
 				migration.Status.CutoverCompleted = true
-				logger.Info("Ghostwire cutover and connection drain succeeded!")
+				logger.Info("Traffic cutover and connection drain succeeded!")
 			}
 		}
 

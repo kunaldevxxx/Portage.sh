@@ -439,3 +439,78 @@ func TestPortageMigrationRollbackOnFailure(t *testing.T) {
 		t.Fatalf("expected PhaseFailed, got %s", migration.Status.Phase)
 	}
 }
+
+func TestPortageMigrationDriverRegistryFallback(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = corev1.AddToScheme(scheme)
+	_ = appsv1.AddToScheme(scheme)
+	_ = networkingv1.AddToScheme(scheme)
+	_ = v1alpha1.AddToScheme(scheme)
+
+	migration := &v1alpha1.PortageMigration{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-open-core-migration",
+			Namespace: "default",
+		},
+		Spec: v1alpha1.PortageMigrationSpec{
+			CDCReplication: &v1alpha1.CDCReplicationSpec{
+				Driver:   "community-cdc",
+				Enabled:  true,
+				Endpoint: "http://localhost:8080",
+				StreamID: "stream-01",
+			},
+			TrafficCutover: &v1alpha1.TrafficCutoverSpec{
+				Driver:           "community-cutover",
+				Enabled:          true,
+				DirectorEndpoint: "http://localhost:9090",
+				RouteID:          "route-01",
+				TargetEndpoint:   "target:5432",
+			},
+		},
+		Status: v1alpha1.PortageMigrationStatus{
+			Phase: v1alpha1.PhaseReplicatingData,
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(migration).
+		WithStatusSubresource(migration).
+		Build()
+
+	// Intentionally leave CDCClient and CutoverClient nil to test registry resolution
+	reconciler := &PortageMigrationReconciler{
+		Client:       fakeClient,
+		Scheme:       scheme,
+		TargetClient: fakeClient,
+	}
+
+	ctx := context.Background()
+	req := ctrl.Request{NamespacedName: types.NamespacedName{Namespace: "default", Name: migration.Name}}
+
+	// 1. PhaseReplicatingData -> resolves community-cdc
+	_, err := reconciler.Reconcile(ctx, req)
+	if err != nil {
+		t.Fatalf("reconcile ReplicatingData failed: %v", err)
+	}
+	_ = fakeClient.Get(ctx, req.NamespacedName, migration)
+	if migration.Status.Phase != v1alpha1.PhaseQuiescing {
+		t.Fatalf("expected PhaseQuiescing, got %s", migration.Status.Phase)
+	}
+
+	// 2. Fast-forward to PhaseCutover -> resolves community-cutover
+	migration.Status.Phase = v1alpha1.PhaseCutover
+	_ = fakeClient.Status().Update(ctx, migration)
+
+	_, err = reconciler.Reconcile(ctx, req)
+	if err != nil {
+		t.Fatalf("reconcile Cutover failed: %v", err)
+	}
+	_ = fakeClient.Get(ctx, req.NamespacedName, migration)
+	if migration.Status.Phase != v1alpha1.PhaseCompleted {
+		t.Fatalf("expected PhaseCompleted, got %s", migration.Status.Phase)
+	}
+	if !migration.Status.CutoverCompleted {
+		t.Fatalf("expected CutoverCompleted=true")
+	}
+}
