@@ -28,3 +28,16 @@ clean:
 	@echo "==> Cleaning artifacts..."
 	cargo clean
 	cd tools/portage && go clean
+
+install-crds:
+	@echo "==> Installing PortageMigration CRDs..."
+	kubectl apply -f deploy/crds/migration.portage.sh_portagemigrations.yaml
+
+deploy: install-crds
+	@echo "==> Deploying Portage Operator..."
+	kubectl apply -f deploy/operator.yaml
+
+undeploy:
+	@echo "==> Removing Portage Operator & CRDs..."
+	kubectl delete -f deploy/operator.yaml --ignore-not-found
+	kubectl delete -f deploy/crds/migration.portage.sh_portagemigrations.yaml --ignore-not-found

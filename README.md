@@ -206,6 +206,267 @@ stateDiagram-v2
 
 ---
 
+## Installation & Deployment Guide
+
+Portage can be deployed into standard Kubernetes clusters, multi-tenant enterprise platforms, or disconnected sovereign air-gapped enclaves.
+
+### Prerequisites
+
+- Kubernetes cluster v1.22+
+- CSI storage driver installed with `VolumeSnapshotClass` support (e.g., AWS EBS CSI, GCP Persistent Disk CSI, Ceph CSI, or Azure Disk CSI)
+- `kubectl` v1.22+ and optionally `helm` v3.8+
+
+---
+
+### Deployment Method 1: Helm 3 (Enterprise Standard)
+
+The recommended deployment method for production environments is the official Helm chart:
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/kunaldevxxx/Portage.sh.git
+cd Portage.sh
+
+# 2. Deploy Portage Operator into portage-system namespace
+helm install portage-operator ./charts/portage-operator \
+  --namespace portage-system \
+  --create-namespace
+
+# 3. Verify operator pod is Running and healthy
+kubectl get pods -n portage-system -l app.kubernetes.io/name=portage-operator
+```
+
+#### Customizing Values:
+
+You can supply custom parameters via `--set` or a values file:
+
+```bash
+helm install portage-operator ./charts/portage-operator \
+  --namespace portage-system \
+  --create-namespace \
+  --set drivers.defaultReplicationDriver=community-cdc \
+  --set drivers.defaultCutoverDriver=community-cutover \
+  --set resources.requests.cpu=200m \
+  --set resources.requests.memory=256Mi
+```
+
+---
+
+### Deployment Method 2: Kubectl All-in-One Manifests
+
+For lightweight testing or GitOps pipelines (ArgoCD / Flux) using standard manifests:
+
+```bash
+# 1. Install CustomResourceDefinitions
+kubectl apply -f deploy/crds/migration.portage.sh_portagemigrations.yaml
+
+# 2. Deploy Operator Namespace, RBAC, and Controller Deployment
+kubectl apply -f deploy/operator.yaml
+
+# Or via Makefile shortcut:
+make deploy
+```
+
+---
+
+### Deployment Method 3: Sovereign Air-Gapped Enclaves
+
+For isolated, classified, or zero-egress networks (e.g., defense, banking, sovereign cloud):
+
+1. **Mirror Container Images to Internal Registry:**
+   ```bash
+   # Pull image in connected environment
+   docker pull ghcr.io/kunaldevxxx/portage-operator:v1.0.0
+   
+   # Retag and push to private air-gapped registry (e.g. Harbor, Artifactory)
+   docker tag ghcr.io/kunaldevxxx/portage-operator:v1.0.0 registry.internal.corp/portage/portage-operator:v1.0.0
+   docker push registry.internal.corp/portage/portage-operator:v1.0.0
+   ```
+
+2. **Install with Air-Gap Registry Overrides:**
+   ```bash
+   helm install portage-operator ./charts/portage-operator \
+     --namespace portage-system \
+     --create-namespace \
+     --set airgap.enabled=true \
+     --set airgap.customRegistry=registry.internal.corp/portage \
+     --set image.pullPolicy=Always
+   ```
+
+---
+
+## How People & Companies Can Use Portage
+
+Portage automates the entire migration lifecycle of databases and stateful microservices through declarative Kubernetes custom resources.
+
+### Step 1: Verify Storage & CSI Snapshot Capabilities
+
+Confirm that your cluster has a functional CSI `VolumeSnapshotClass`:
+
+```bash
+kubectl get volumesnapshotclass
+```
+
+Example output:
+```text
+NAME            DRIVER                DELETIONPOLICY   AGE
+csi-aws-vsc     ebs.csi.aws.com       Delete           42d
+```
+
+### Step 2: Define a Migration Manifest (`PortageMigration`)
+
+Create a migration specification tailored to your workload. Below is a production example migrating a PostgreSQL `StatefulSet` from legacy storage (`gp2`) to modern encrypted NVMe (`gp3-encrypted`), while modernizing Ingress APIs from `extensions/v1beta1` to `networking.k8s.io/v1`:
+
+```yaml
+# postgres-migration.yaml
+apiVersion: migration.portage.sh/v1alpha1
+kind: PortageMigration
+metadata:
+  name: postgres-live-migration
+  namespace: database-prod
+spec:
+  # Source workload to migrate
+  sourceWorkload:
+    kind: StatefulSet
+    name: postgres-cluster
+  sourceNamespace: database-prod
+  targetNamespace: database-modern-prod
+
+  # Quiescence Hooks (Sub-second DB flush & read lock)
+  preQuiesceHooks:
+    - name: postgres-checkpoint-and-lock
+      type: PodExec
+      timeoutSeconds: 15
+      maxRetries: 3
+      podExec:
+        selector:
+          matchLabels:
+            app.kubernetes.io/name: postgres
+            role: primary
+        command:
+          - psql
+          - -U
+          - postgres
+          - -c
+          - "CHECKPOINT; SELECT pg_backup_start('portage_barrier', true);"
+
+  postQuiesceHooks:
+    - name: postgres-unlock
+      type: PodExec
+      timeoutSeconds: 15
+      maxRetries: 3
+      podExec:
+        selector:
+          matchLabels:
+            app.kubernetes.io/name: postgres
+            role: primary
+        command:
+          - psql
+          - -U
+          - postgres
+          - -c
+          - "SELECT pg_backup_stop();"
+
+  # Volume snapshotting and destination storage class
+  volumeMigration:
+    volumeSnapshotClassName: csi-aws-vsc
+    targetStorageClassName: gp3-encrypted
+    persistentVolumeClaimNames:
+      - data-postgres-cluster-0
+    retainOnSource: true
+
+  # Pluggable Replication Driver (community-cdc or enterprise-synapse)
+  cdcReplication:
+    driver: enterprise-synapse
+    enabled: true
+    endpoint: "synapse-cdc.database-prod.svc:9000"
+    streamID: "pg-wal-stream-prod"
+    requireMerkleVerification: true
+    maxAllowedLagSeconds: 2
+
+  # Pluggable Traffic Cutover Driver (community-cutover or enterprise-ghostwire)
+  trafficCutover:
+    driver: enterprise-ghostwire
+    enabled: true
+    directorEndpoint: "ghostwire.database-prod.svc:8000"
+    routeID: "postgres-traffic-route"
+    targetEndpoint: "postgres-cluster.database-modern-prod.svc:5432"
+    drainTimeoutSeconds: 15
+
+  # AST API Translation Rules
+  translationRules:
+    - sourceAPIVersion: "extensions/v1beta1"
+      targetAPIVersion: "networking.k8s.io/v1"
+      kind: "Ingress"
+```
+
+### Step 3: Execute & Monitor the Migration
+
+Apply the custom resource to initiate the 10-phase automated workflow:
+
+```bash
+# Apply migration resource
+kubectl apply -f postgres-migration.yaml
+
+# Watch migration progress in real-time
+kubectl get portagemigration -n database-prod -w
+```
+
+Example live status transitions:
+```text
+NAME                     PHASE            LAG   MERKLE   AGE
+postgres-live-migration  Validating                      2s
+postgres-live-migration  Translating                     5s
+postgres-live-migration  ReplicatingData  1s    false    12s
+postgres-live-migration  Quiescing        0s    true     24s
+postgres-live-migration  Snapshotting     0s    true     26s
+postgres-live-migration  Unquiescing      0s    true     27s
+postgres-live-migration  ApplyingTarget   0s    true     35s
+postgres-live-migration  Cutover          0s    true     42s
+postgres-live-migration  Completed        0s    true     58s
+```
+
+Inspect detailed conditions and audit events:
+
+```bash
+kubectl describe portagemigration postgres-live-migration -n database-prod
+```
+
+### Step 4: Built-in Safety & Rollback Behavior
+
+Portage contains defensive circuit-breakers at every phase:
+- If pre-quiescence locks fail or exceed timeouts, database locks are immediately aborted.
+- If Merkle tree verification fails (detecting byte divergence), cutover is halted before client traffic moves.
+- If target workload startup fails, cutover does not execute, source traffic remains untouched, and the controller transitions to `PhaseRollback`.
+
+### Step 5: Day-2 Operations
+
+Once `status.phase` reaches `Completed`:
+1. Validate connectivity against the modernized target workload.
+2. The source PersistentVolumes and snapshots are preserved (`spec.volumeMigration.retainOnSource: true`) for post-migration compliance and forensic safety.
+3. Clean up the migration resource when auditing is complete:
+   ```bash
+   kubectl delete portagemigration postgres-live-migration -n database-prod
+   ```
+
+---
+
+## Enterprise & Commercial Adoption (BSL 1.1)
+
+### For Internal Enterprise Teams
+
+Any organization, startup, or enterprise can deploy and use the Portage Platform internally:
+- **Zero Cost for Internal Operations:** You may use Portage to migrate your own databases, Kubernetes workloads, storage tiers, and applications across data centers, clouds, or on-premises infrastructure completely free of charge.
+- **Evaluation & Staging:** Free for evaluation, research, development, and testing.
+
+### For Cloud Providers & Service Vendors (Commercial Non-Compete)
+
+The Business Source License 1.1 explicitly protects the platform from unauthorized commercial exploitation:
+- **Prohibited Use:** No third party may offer Portage, Synapse-CDC, Ghostwire, or derivative works as a managed service, hosted cloud offering, DBaaS, SaaS migration tool, or commercial product competing directly with `@kunaldevxxx`.
+- **Enterprise Licensing:** Cloud providers, system integrators, and vendors wishing to embed or offer Portage as a commercial service must obtain a commercial enterprise license from `@kunaldevxxx`.
+
+---
+
 ## Compliance
 
 
