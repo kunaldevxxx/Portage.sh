@@ -13,10 +13,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
+	"time"
 
 	v1alpha1 "github.com/aegis-migrate/portage/api/v1alpha1"
 	"github.com/aegis-migrate/portage/controllers"
 	"github.com/aegis-migrate/portage/pkg/ast"
+	"github.com/aegis-migrate/portage/pkg/cdc"
+	"github.com/aegis-migrate/portage/pkg/cutover"
 	"github.com/aegis-migrate/portage/pkg/quiesce"
 )
 
@@ -67,12 +70,16 @@ func main() {
 
 	hookExec := quiesce.NewK8sHookExecutor(kubeClient, nil)
 	astEngine := ast.NewASTTranslationEngine()
+	cdcClient := cdc.NewHTTPCDCClient(15 * time.Second)
+	cutoverClient := cutover.NewHTTPCutoverClient(30 * time.Second)
 
 	if err = (&controllers.PortageMigrationReconciler{
-		Client:       mgr.GetClient(),
-		Scheme:       mgr.GetScheme(),
-		HookExecutor: hookExec,
-		ASTEngine:    astEngine,
+		Client:        mgr.GetClient(),
+		Scheme:        mgr.GetScheme(),
+		HookExecutor:  hookExec,
+		ASTEngine:     astEngine,
+		CDCClient:     cdcClient,
+		CutoverClient: cutoverClient,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "PortageMigration")
 		os.Exit(1)

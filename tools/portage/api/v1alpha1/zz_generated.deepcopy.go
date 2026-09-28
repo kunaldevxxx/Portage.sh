@@ -83,6 +83,16 @@ func (in *PortageMigrationSpec) DeepCopyInto(out *PortageMigrationSpec) {
 		copy(*out, *in)
 	}
 	in.VolumeMigration.DeepCopyInto(&out.VolumeMigration)
+	if in.CDCReplication != nil {
+		in, out := &in.CDCReplication, &out.CDCReplication
+		*out = new(CDCReplicationSpec)
+		**out = **in
+	}
+	if in.TrafficCutover != nil {
+		in, out := &in.TrafficCutover, &out.TrafficCutover
+		*out = new(TrafficCutoverSpec)
+		**out = **in
+	}
 	if in.TranslationRules != nil {
 		in, out := &in.TranslationRules, &out.TranslationRules
 		*out = make([]APITranslationRule, len(*in))

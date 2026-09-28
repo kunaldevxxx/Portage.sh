@@ -9,19 +9,20 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// ManifestTranslator defines the interface for intercepting and transforming
-// deprecated or environment-specific Kubernetes manifests into compliant target manifests.
+// TranslationOptions configures target transformations
+type TranslationOptions struct {
+	TargetNamespace        string
+	TargetStorageClassName string
+}
+
+// ManifestTranslator defines the interface for transforming Kubernetes manifests
 type ManifestTranslator interface {
-	// CanTranslate returns true if this translator can handle the given GroupVersionKind
 	CanTranslate(gvk schema.GroupVersionKind) bool
-	// Translate transforms raw YAML manifest from source format to modern target format
-	Translate(ctx context.Context, sourceYAML []byte, targetNamespace string) ([]byte, error)
-	// TargetGVK returns the modernized GroupVersionKind produced by this translator
+	Translate(ctx context.Context, sourceYAML []byte, opts TranslationOptions) ([]byte, error)
 	TargetGVK() schema.GroupVersionKind
 }
 
-// IngressASTTranslator handles migration from legacy extensions/v1beta1
-// or networking.k8s.io/v1beta1 to modern networking.k8s.io/v1 Ingress specs.
+// IngressASTTranslator migrates legacy Ingresses to networking.k8s.io/v1
 type IngressASTTranslator struct {
 	DefaultPathType        string
 	IngressClassAnnotation string
@@ -50,8 +51,7 @@ func (t *IngressASTTranslator) TargetGVK() schema.GroupVersionKind {
 	}
 }
 
-func (t *IngressASTTranslator) Translate(ctx context.Context, sourceYAML []byte, targetNamespace string) ([]byte, error) {
-	// Parse raw YAML into generic yaml.Node to retain AST structure, comments, and node hierarchy
+func (t *IngressASTTranslator) Translate(ctx context.Context, sourceYAML []byte, opts TranslationOptions) ([]byte, error) {
 	var root yaml.Node
 	if err := yaml.Unmarshal(sourceYAML, &root); err != nil {
 		return nil, fmt.Errorf("failed to parse manifest into YAML AST: %w", err)
@@ -66,44 +66,44 @@ func (t *IngressASTTranslator) Translate(ctx context.Context, sourceYAML []byte,
 		return nil, fmt.Errorf("expected mapping node at root, got kind %d", docNode.Kind)
 	}
 
-	// 1. Update apiVersion to networking.k8s.io/v1
+	// 1. Mutate apiVersion to networking.k8s.io/v1
 	if err := setMapFieldValue(docNode, "apiVersion", "networking.k8s.io/v1"); err != nil {
 		return nil, fmt.Errorf("failed to update apiVersion: %w", err)
 	}
 
-	// 2. Handle metadata: namespace remapping and ingress-class annotation extraction
+	// 2. Clean status
+	deleteMapField(docNode, "status")
+
+	// 3. Namespace remapping & ingress-class annotation extraction
 	metadataNode := findMapValue(docNode, "metadata")
 	var ingressClassVal string
 	if metadataNode != nil {
-		if targetNamespace != "" {
-			_ = setMapFieldValue(metadataNode, "namespace", targetNamespace)
+		stripClusterMetadata(metadataNode)
+		if opts.TargetNamespace != "" {
+			_ = setMapFieldValue(metadataNode, "namespace", opts.TargetNamespace)
 		}
 		annotationsNode := findMapValue(metadataNode, "annotations")
 		if annotationsNode != nil {
 			if classValNode := findMapValue(annotationsNode, t.IngressClassAnnotation); classValNode != nil {
 				ingressClassVal = classValNode.Value
-				// Remove legacy annotation
 				deleteMapField(annotationsNode, t.IngressClassAnnotation)
 			}
 		}
 	}
 
-	// 3. Mutate spec
+	// 4. Mutate spec fields
 	specNode := findMapValue(docNode, "spec")
 	if specNode != nil {
-		// If ingress class was found in annotations and spec.ingressClassName is missing, set it
 		if ingressClassVal != "" && findMapValue(specNode, "ingressClassName") == nil {
 			_ = setMapFieldValue(specNode, "ingressClassName", ingressClassVal)
 		}
 
-		// Mutate default backend if present
 		if defaultBackendNode := findMapValue(specNode, "backend"); defaultBackendNode != nil {
 			if err := t.transformBackendNode(defaultBackendNode); err != nil {
 				return nil, fmt.Errorf("failed to transform default backend: %w", err)
 			}
 		}
 
-		// Mutate rules -> http -> paths
 		rulesNode := findMapValue(specNode, "rules")
 		if rulesNode != nil && rulesNode.Kind == yaml.SequenceNode {
 			for _, ruleItem := range rulesNode.Content {
@@ -116,11 +116,9 @@ func (t *IngressASTTranslator) Translate(ctx context.Context, sourceYAML []byte,
 					continue
 				}
 				for _, pathItem := range pathsNode.Content {
-					// Ensure pathType is present (mandatory in networking.k8s.io/v1)
 					if findMapValue(pathItem, "pathType") == nil {
 						_ = setMapFieldValue(pathItem, "pathType", t.DefaultPathType)
 					}
-					// Transform path backend
 					backendNode := findMapValue(pathItem, "backend")
 					if backendNode != nil {
 						if err := t.transformBackendNode(backendNode); err != nil {
@@ -132,35 +130,14 @@ func (t *IngressASTTranslator) Translate(ctx context.Context, sourceYAML []byte,
 		}
 	}
 
-	out, err := yaml.Marshal(&root)
-	if err != nil {
-		return nil, fmt.Errorf("failed to serialize AST to YAML: %w", err)
-	}
-
-	return out, nil
+	return yaml.Marshal(&root)
 }
 
-// transformBackendNode morphs legacy backend:
-//   backend:
-//     serviceName: foo
-//     servicePort: 8080 | "http"
-// into modern:
-//   backend:
-//     service:
-//       name: foo
-//       port:
-//         number: 8080  (or name: "http")
 func (t *IngressASTTranslator) transformBackendNode(backendNode *yaml.Node) error {
 	svcNameNode := findMapValue(backendNode, "serviceName")
 	svcPortNode := findMapValue(backendNode, "servicePort")
 
-	// If already in new format, skip
-	if findMapValue(backendNode, "service") != nil {
-		return nil
-	}
-
-	if svcNameNode == nil || svcPortNode == nil {
-		// Could be a resource backend; leave as is
+	if findMapValue(backendNode, "service") != nil || svcNameNode == nil || svcPortNode == nil {
 		return nil
 	}
 
@@ -168,7 +145,6 @@ func (t *IngressASTTranslator) transformBackendNode(backendNode *yaml.Node) erro
 	var portKey string
 	var portVal string
 
-	// Determine if port is integer or named string
 	if svcPortNode.Tag == "!!int" || isDigits(svcPortNode.Value) {
 		portKey = "number"
 		portVal = svcPortNode.Value
@@ -177,11 +153,9 @@ func (t *IngressASTTranslator) transformBackendNode(backendNode *yaml.Node) erro
 		portVal = svcPortNode.Value
 	}
 
-	// Delete legacy fields
 	deleteMapField(backendNode, "serviceName")
 	deleteMapField(backendNode, "servicePort")
 
-	// Construct nested service node
 	serviceNode := &yaml.Node{
 		Kind: yaml.MappingNode,
 		Content: []*yaml.Node{
@@ -194,7 +168,7 @@ func (t *IngressASTTranslator) transformBackendNode(backendNode *yaml.Node) erro
 					{Kind: yaml.ScalarNode, Value: portKey},
 					{
 						Kind:  yaml.ScalarNode,
-						Tag:   func() string { if portKey == "number" { return "!!int" } ; return "!!str" }(),
+						Tag:   func() string { if portKey == "number" { return "!!int" }; return "!!str" }(),
 						Value: portVal,
 					},
 				},
@@ -210,6 +184,156 @@ func (t *IngressASTTranslator) transformBackendNode(backendNode *yaml.Node) erro
 	return nil
 }
 
+// StatefulSetASTTranslator translates apps/v1beta1, apps/v1beta2 to apps/v1
+// and remaps StorageClasses in volumeClaimTemplates
+type StatefulSetASTTranslator struct{}
+
+func NewStatefulSetASTTranslator() *StatefulSetASTTranslator {
+	return &StatefulSetASTTranslator{}
+}
+
+func (t *StatefulSetASTTranslator) CanTranslate(gvk schema.GroupVersionKind) bool {
+	if gvk.Kind != "StatefulSet" {
+		return false
+	}
+	return gvk.Group == "apps" || gvk.Group == ""
+}
+
+func (t *StatefulSetASTTranslator) TargetGVK() schema.GroupVersionKind {
+	return schema.GroupVersionKind{
+		Group:   "apps",
+		Version: "v1",
+		Kind:    "StatefulSet",
+	}
+}
+
+func (t *StatefulSetASTTranslator) Translate(ctx context.Context, sourceYAML []byte, opts TranslationOptions) ([]byte, error) {
+	var root yaml.Node
+	if err := yaml.Unmarshal(sourceYAML, &root); err != nil {
+		return nil, fmt.Errorf("failed to parse StatefulSet YAML AST: %w", err)
+	}
+
+	if len(root.Content) == 0 {
+		return nil, fmt.Errorf("empty YAML document")
+	}
+
+	docNode := root.Content[0]
+	if docNode.Kind != yaml.MappingNode {
+		return nil, fmt.Errorf("expected mapping node at root")
+	}
+
+	// 1. Upgrade apiVersion to apps/v1
+	_ = setMapFieldValue(docNode, "apiVersion", "apps/v1")
+
+	// 2. Clean status
+	deleteMapField(docNode, "status")
+
+	// 3. Remap metadata namespace & strip cluster runtime fields
+	metadataNode := findMapValue(docNode, "metadata")
+	if metadataNode != nil {
+		stripClusterMetadata(metadataNode)
+		if opts.TargetNamespace != "" {
+			_ = setMapFieldValue(metadataNode, "namespace", opts.TargetNamespace)
+		}
+	}
+
+	// 4. Spec transformations: volumeClaimTemplates StorageClass remapping
+	specNode := findMapValue(docNode, "spec")
+	if specNode != nil {
+		vctNode := findMapValue(specNode, "volumeClaimTemplates")
+		if vctNode != nil && vctNode.Kind == yaml.SequenceNode && opts.TargetStorageClassName != "" {
+			for _, vctItem := range vctNode.Content {
+				vctSpec := findMapValue(vctItem, "spec")
+				if vctSpec != nil {
+					_ = setMapFieldValue(vctSpec, "storageClassName", opts.TargetStorageClassName)
+				}
+			}
+		}
+
+		// Ensure selector exists (mandatory in apps/v1)
+		selectorNode := findMapValue(specNode, "selector")
+		if selectorNode == nil {
+			templateNode := findMapValue(specNode, "template")
+			if templateNode != nil {
+				templateMeta := findMapValue(templateNode, "metadata")
+				if templateMeta != nil {
+					labelsNode := findMapValue(templateMeta, "labels")
+					if labelsNode != nil {
+						newSelector := &yaml.Node{
+							Kind: yaml.MappingNode,
+							Content: []*yaml.Node{
+								{Kind: yaml.ScalarNode, Value: "matchLabels"},
+								labelsNode,
+							},
+						}
+						specNode.Content = append(specNode.Content,
+							&yaml.Node{Kind: yaml.ScalarNode, Value: "selector"},
+							newSelector,
+						)
+					}
+				}
+			}
+		}
+	}
+
+	return yaml.Marshal(&root)
+}
+
+// ServiceASTTranslator translates Services (cleaning clusterIP and remapping namespace)
+type ServiceASTTranslator struct{}
+
+func NewServiceASTTranslator() *ServiceASTTranslator {
+	return &ServiceASTTranslator{}
+}
+
+func (t *ServiceASTTranslator) CanTranslate(gvk schema.GroupVersionKind) bool {
+	return gvk.Kind == "Service" && (gvk.Group == "" || gvk.Group == "core")
+}
+
+func (t *ServiceASTTranslator) TargetGVK() schema.GroupVersionKind {
+	return schema.GroupVersionKind{
+		Group:   "",
+		Version: "v1",
+		Kind:    "Service",
+	}
+}
+
+func (t *ServiceASTTranslator) Translate(ctx context.Context, sourceYAML []byte, opts TranslationOptions) ([]byte, error) {
+	var root yaml.Node
+	if err := yaml.Unmarshal(sourceYAML, &root); err != nil {
+		return nil, fmt.Errorf("failed to parse Service YAML AST: %w", err)
+	}
+
+	if len(root.Content) == 0 {
+		return nil, fmt.Errorf("empty YAML document")
+	}
+
+	docNode := root.Content[0]
+	if docNode.Kind != yaml.MappingNode {
+		return nil, fmt.Errorf("expected mapping node at root")
+	}
+
+	_ = setMapFieldValue(docNode, "apiVersion", "v1")
+	deleteMapField(docNode, "status")
+
+	metadataNode := findMapValue(docNode, "metadata")
+	if metadataNode != nil {
+		stripClusterMetadata(metadataNode)
+		if opts.TargetNamespace != "" {
+			_ = setMapFieldValue(metadataNode, "namespace", opts.TargetNamespace)
+		}
+	}
+
+	specNode := findMapValue(docNode, "spec")
+	if specNode != nil {
+		// Strip static allocated IPs so target cluster allocates cleanly
+		deleteMapField(specNode, "clusterIP")
+		deleteMapField(specNode, "clusterIPs")
+	}
+
+	return yaml.Marshal(&root)
+}
+
 // Registry coordinates multiple AST translators for manifests.
 type ASTTranslationEngine struct {
 	translators []ManifestTranslator
@@ -219,6 +343,8 @@ func NewASTTranslationEngine() *ASTTranslationEngine {
 	return &ASTTranslationEngine{
 		translators: []ManifestTranslator{
 			NewIngressASTTranslator(),
+			NewStatefulSetASTTranslator(),
+			NewServiceASTTranslator(),
 		},
 	}
 }
@@ -227,8 +353,7 @@ func (e *ASTTranslationEngine) RegisterTranslator(t ManifestTranslator) {
 	e.translators = append(e.translators, t)
 }
 
-func (e *ASTTranslationEngine) TranslateManifest(ctx context.Context, rawYAML []byte, targetNamespace string) ([]byte, schema.GroupVersionKind, error) {
-	// Probe GVK using unstructured decoder
+func (e *ASTTranslationEngine) TranslateManifest(ctx context.Context, rawYAML []byte, opts TranslationOptions) ([]byte, schema.GroupVersionKind, error) {
 	var u unstructured.Unstructured
 	if err := yaml.Unmarshal(rawYAML, &u.Object); err != nil {
 		return nil, schema.GroupVersionKind{}, fmt.Errorf("invalid Kubernetes manifest: %w", err)
@@ -237,7 +362,7 @@ func (e *ASTTranslationEngine) TranslateManifest(ctx context.Context, rawYAML []
 	gvk := u.GroupVersionKind()
 	for _, tr := range e.translators {
 		if tr.CanTranslate(gvk) {
-			translated, err := tr.Translate(ctx, rawYAML, targetNamespace)
+			translated, err := tr.Translate(ctx, rawYAML, opts)
 			if err != nil {
 				return nil, schema.GroupVersionKind{}, fmt.Errorf("translation failed for %s: %w", gvk.String(), err)
 			}
@@ -245,17 +370,47 @@ func (e *ASTTranslationEngine) TranslateManifest(ctx context.Context, rawYAML []
 		}
 	}
 
-	// If no translator matched, return unchanged with target namespace modified if applicable
-	if targetNamespace != "" {
-		u.SetNamespace(targetNamespace)
-		out, err := yaml.Marshal(u.Object)
-		return out, gvk, err
+	// Default fallback: mutate namespace and strip cluster metadata
+	if opts.TargetNamespace != "" {
+		u.SetNamespace(opts.TargetNamespace)
 	}
+	delete(u.Object, "status")
+	metadata, ok := u.Object["metadata"].(map[string]interface{})
+	if ok {
+		delete(metadata, "resourceVersion")
+		delete(metadata, "uid")
+		delete(metadata, "creationTimestamp")
+		delete(metadata, "generation")
+	}
+	out, err := yaml.Marshal(u.Object)
+	return out, gvk, err
+}
 
-	return rawYAML, gvk, nil
+func (e *ASTTranslationEngine) TranslateResource(ctx context.Context, u *unstructured.Unstructured, opts TranslationOptions) (*unstructured.Unstructured, error) {
+	raw, err := yaml.Marshal(u.Object)
+	if err != nil {
+		return nil, err
+	}
+	translated, _, err := e.TranslateManifest(ctx, raw, opts)
+	if err != nil {
+		return nil, err
+	}
+	var res unstructured.Unstructured
+	if err := yaml.Unmarshal(translated, &res.Object); err != nil {
+		return nil, err
+	}
+	return &res, nil
 }
 
 // AST Helper functions
+
+func stripClusterMetadata(metadataNode *yaml.Node) {
+	deleteMapField(metadataNode, "resourceVersion")
+	deleteMapField(metadataNode, "uid")
+	deleteMapField(metadataNode, "creationTimestamp")
+	deleteMapField(metadataNode, "generation")
+	deleteMapField(metadataNode, "selfLink")
+}
 
 func findMapValue(node *yaml.Node, key string) *yaml.Node {
 	if node == nil || node.Kind != yaml.MappingNode {
@@ -269,7 +424,7 @@ func findMapValue(node *yaml.Node, key string) *yaml.Node {
 	return nil
 }
 
-func setMapFieldValue(node *yaml.Node, key string, val string) error {
+func setMapFieldValue(node *yaml.Node, key, val string) error {
 	if node.Kind != yaml.MappingNode {
 		return fmt.Errorf("cannot set field on non-mapping node")
 	}

@@ -39,8 +39,10 @@ spec:
 	engine := NewASTTranslationEngine()
 	ctx := context.Background()
 
-	targetNamespace := "modern-prod"
-	translatedYAML, gvk, err := engine.TranslateManifest(ctx, []byte(legacyIngressYAML), targetNamespace)
+	opts := TranslationOptions{
+		TargetNamespace: "modern-prod",
+	}
+	translatedYAML, gvk, err := engine.TranslateManifest(ctx, []byte(legacyIngressYAML), opts)
 	if err != nil {
 		t.Fatalf("unexpected translation failure: %v", err)
 	}
@@ -54,7 +56,6 @@ spec:
 		t.Errorf("expected GVK %v, got %v", expectedGVK, gvk)
 	}
 
-	// Parse back to inspect transformed AST structure
 	var parsed map[string]interface{}
 	if err := yaml.Unmarshal(translatedYAML, &parsed); err != nil {
 		t.Fatalf("failed unmarshaling transformed YAML: %v", err)
@@ -123,5 +124,97 @@ spec:
 	p1Port := p1Svc["port"].(map[string]interface{})
 	if p1Port["name"] != "http-web" {
 		t.Errorf("expected named string port http-web, got %v", p1Port["name"])
+	}
+}
+
+func TestStatefulSetASTTranslation(t *testing.T) {
+	legacyStatefulSetYAML := `
+apiVersion: apps/v1beta1
+kind: StatefulSet
+metadata:
+  name: postgres-ha
+  namespace: legacy-namespace
+  resourceVersion: "1928374"
+  uid: "123e4567-e89b-12d3-a456-426614174000"
+spec:
+  serviceName: postgres-ha
+  replicas: 3
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: postgres
+    spec:
+      containers:
+      - name: postgres
+        image: postgres:15
+  volumeClaimTemplates:
+  - metadata:
+      name: data-volume
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      storageClassName: standard-sc
+status:
+  replicas: 3
+  readyReplicas: 3
+`
+
+	engine := NewASTTranslationEngine()
+	ctx := context.Background()
+
+	opts := TranslationOptions{
+		TargetNamespace:        "target-namespace",
+		TargetStorageClassName: "modern-nvme-sc",
+	}
+
+	translatedYAML, gvk, err := engine.TranslateManifest(ctx, []byte(legacyStatefulSetYAML), opts)
+	if err != nil {
+		t.Fatalf("StatefulSet translation failed: %v", err)
+	}
+
+	if gvk.Group != "apps" || gvk.Version != "v1" || gvk.Kind != "StatefulSet" {
+		t.Errorf("expected GVK apps/v1/StatefulSet, got %v", gvk)
+	}
+
+	var parsed map[string]interface{}
+	if err := yaml.Unmarshal(translatedYAML, &parsed); err != nil {
+		t.Fatalf("failed unmarshaling translated StatefulSet: %v", err)
+	}
+
+	// 1. Verify apiVersion upgraded to apps/v1
+	if parsed["apiVersion"] != "apps/v1" {
+		t.Errorf("expected apiVersion apps/v1, got %v", parsed["apiVersion"])
+	}
+
+	// 2. Verify status was stripped
+	if _, hasStatus := parsed["status"]; hasStatus {
+		t.Errorf("expected status to be stripped from target manifest")
+	}
+
+	// 3. Verify metadata: namespace updated, runtime fields stripped
+	metadata := parsed["metadata"].(map[string]interface{})
+	if metadata["namespace"] != "target-namespace" {
+		t.Errorf("expected namespace target-namespace, got %v", metadata["namespace"])
+	}
+	if _, hasUID := metadata["uid"]; hasUID {
+		t.Errorf("expected uid to be stripped")
+	}
+	if _, hasRV := metadata["resourceVersion"]; hasRV {
+		t.Errorf("expected resourceVersion to be stripped")
+	}
+
+	// 4. Verify volumeClaimTemplates storageClassName remapped
+	spec := parsed["spec"].(map[string]interface{})
+	vcts := spec["volumeClaimTemplates"].([]interface{})
+	vct0 := vcts[0].(map[string]interface{})
+	vctSpec := vct0["spec"].(map[string]interface{})
+	if vctSpec["storageClassName"] != "modern-nvme-sc" {
+		t.Errorf("expected storageClassName modern-nvme-sc, got %v", vctSpec["storageClassName"])
+	}
+
+	// 5. Verify selector was synthesized for apps/v1 requirement
+	selector := spec["selector"].(map[string]interface{})
+	matchLabels := selector["matchLabels"].(map[string]interface{})
+	if matchLabels["app.kubernetes.io/name"] != "postgres" {
+		t.Errorf("expected selector matchLabels app.kubernetes.io/name: postgres, got %v", matchLabels)
 	}
 }
