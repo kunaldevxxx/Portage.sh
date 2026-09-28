@@ -59,22 +59,30 @@ async fn test_zero_loss_traffic_cutover() {
     let text_a = String::from_utf8_lossy(&resp_a[..n_a]);
     assert!(text_a.starts_with("SOURCE:payload_alpha"));
 
-    // 4. Trigger Atomic Cutover
+    // Spawn background task to gracefully complete and close in-flight Client A session
+    let client_a_handle = tokio::spawn(async move {
+        // Allow cutover to initiate and enter drain phase
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        // Verify existing Client A can still finish its session gracefully (no RST)
+        client_a.write_all(b"_flush").await.unwrap();
+        let mut resp = [0u8; 64];
+        let n = client_a.read(&mut resp).await.unwrap();
+        let text = String::from_utf8_lossy(&resp[..n]);
+        assert!(text.contains("SOURCE:"));
+        drop(client_a);
+    });
+
+    // 4. Trigger Atomic Cutover & Drain in-flight source connections
     director
-        .execute_cutover(Duration::from_secs(2))
+        .execute_cutover(Duration::from_secs(5))
         .await
         .expect("Cutover and connection drain must succeed");
 
     assert_eq!(director.current_route(), RoutingTarget::TargetCluster);
 
-    // 5. Verify existing Client A can still finish its session gracefully (no RST)
-    client_a.write_all(b"_flush").await.unwrap();
-    let n_a2 = client_a.read(&mut resp_a).await.unwrap();
-    let text_a2 = String::from_utf8_lossy(&resp_a[..n_a2]);
-    assert!(text_a2.contains("SOURCE:"));
-    drop(client_a);
+    client_a_handle.await.unwrap();
 
-    // 6. Connect Client B after cutover (must hit TARGET)
+    // 5. Connect Client B after cutover (must hit TARGET)
     let mut client_b = tokio::net::TcpStream::connect(proxy_addr)
         .await
         .expect("Client B connection failed");

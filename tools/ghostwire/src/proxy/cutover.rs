@@ -87,8 +87,12 @@ impl CutoverDirector {
         let notifier = self.drain_notify.clone();
 
         let drain_future = async {
-            while active.load(Ordering::Acquire) > 0 {
-                notifier.notified().await;
+            loop {
+                let notified = notifier.notified();
+                if active.load(Ordering::Acquire) == 0 {
+                    break;
+                }
+                notified.await;
             }
         };
 
@@ -125,23 +129,21 @@ impl CutoverDirector {
                     match accept_res {
                         Ok((client_stream, _)) => {
                             let is_target = self.current_target.load(Ordering::Acquire);
-                            let backend_addr = if is_target {
+                            let (backend_addr, guard) = if is_target {
                                 self.metrics.total_routed_target.fetch_add(1, Ordering::Relaxed);
-                                self.target_backend
+                                (self.target_backend, None)
                             } else {
                                 self.metrics.total_routed_source.fetch_add(1, Ordering::Relaxed);
-                                self.source_backend
+                                self.active_connections.fetch_add(1, Ordering::SeqCst);
+                                let guard = ConnectionGuard {
+                                    counter: self.active_connections.clone(),
+                                    notifier: self.drain_notify.clone(),
+                                };
+                                (self.source_backend, Some(guard))
                             };
 
-                            let active = self.active_connections.clone();
-                            let notifier = self.drain_notify.clone();
-                            active.fetch_add(1, Ordering::SeqCst);
-
                             tokio::spawn(async move {
-                                let _guard = ConnectionGuard {
-                                    counter: active,
-                                    notifier,
-                                };
+                                let _guard = guard;
 
                                 if let Ok(mut backend_stream) = TcpStream::connect(backend_addr).await {
                                     let mut client_stream = client_stream;
