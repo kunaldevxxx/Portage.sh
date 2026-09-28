@@ -9,11 +9,16 @@ on:
 permissions:
   contents: read
   security-events: write
+  actions: read
 
 jobs:
   trivy-scan:
     name: "Trivy Vulnerability & Misconfiguration Scan"
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
     steps:
       - name: "Checkout Code"
         uses: actions/checkout@v4
@@ -27,9 +32,18 @@ jobs:
           output: "trivy-results.sarif"
           severity: "CRITICAL,HIGH"
 
+      - name: "Archive Trivy Scan Results"
+        uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: trivy-security-report
+          path: trivy-results.sarif
+          if-no-files-found: ignore
+
       - name: "Upload Trivy SARIF to GitHub Security"
         uses: github/codeql-action/upload-sarif@v4
         if: always()
+        continue-on-error: true
         with:
           sarif_file: "trivy-results.sarif"
           category: "trivy"
