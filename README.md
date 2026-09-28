@@ -182,9 +182,8 @@ stateDiagram-v2
 
 ---
 
-## Sovereign Air-Gapped Compliance
+## Compliance
 
-Designed for **National Security Systems (NSS)**, **Special Access Program Facilities (SAP/SCIF)**, and **Tier-0 Financial Enclaves**:
 
 1. **Zero Egress / Zero Telemetry Guarantee:**
    - The binaries and container images contain zero phone-home mechanisms, analytics collectors, or external DNS lookups.
@@ -197,28 +196,6 @@ Designed for **National Security Systems (NSS)**, **Special Access Program Facil
    - **NIST SP 800-53 Rev. 5:** Controls SC-8 (Transmission Confidentiality & Integrity), CP-9 (Information System Backup), and SI-7 (Software, Firmware, and Information Integrity).
    - **FIPS 140-2 / FIPS 140-3:** Uses approved cryptographic algorithms (`sha256`) for state digests and integrity hashing.
    - **DISA STIG:** Enforces non-root container user (`UID 65532`), read-only root filesystems, and strict Pod Security Standards (`Restricted`).
-
----
-
-## Repository Security & Branch Protection
-
-Direct pushes to the `main` branch are blocked. All commits must be merged via Pull Requests approved by the repository owner:
-
-```
-Protected Branch: main
-├── Direct Commits: BLOCKED (Admins included)
-├── Mandatory Approvals: Minimum 1 from @kunaldevxxx (.github/CODEOWNERS)
-├── Stale Approval Invalidation: ENABLED on new commit pushes
-├── Linear Commit History: ENFORCED (Rebase / Squash only)
-├── Cryptographic Signatures: REQUIRED (GPG or SSH signed commits)
-└── Mandatory Status Checks:
-    ├── Go Test & Lint (Portage.sh)
-    ├── Rust Test & Lint (Synapse-CDC & Ghostwire)
-    ├── Trivy Vulnerability & Misconfiguration Scan
-    └── Security, Secrets & Vulnerability Audits (Gitleaks / Govulncheck)
-```
-
-The complete GitHub Ruleset export is provided in [`.github/rulesets/main-protection.json`](.github/rulesets/main-protection.json).
 
 ---
 
