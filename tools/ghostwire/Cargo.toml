@@ -8,7 +8,7 @@ description = "Zero-Drop L4/L7 Traffic Director & Connection Drainer"
 [dependencies]
 tokio = { version = "1.36", features = ["full"] }
 async-trait = "0.1"
-thiserror = "1.0"
+thiserror = "2.0"
 tracing = "0.1"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"

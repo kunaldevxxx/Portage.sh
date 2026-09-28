@@ -4,40 +4,56 @@ updates:
   - package-ecosystem: "gomod"
     directory: "/tools/portage"
     schedule:
-      interval: "daily"
-    open-pull-requests-limit: 10
+      interval: "weekly"
+    open-pull-requests-limit: 5
     reviewers:
       - "kunaldevxxx"
     labels:
       - "dependencies"
       - "security"
       - "go"
+    groups:
+      kubernetes:
+        patterns:
+          - "k8s.io/*"
+          - "sigs.k8s.io/*"
+      common:
+        patterns:
+          - "*"
 
   # Maintain Rust dependencies for Synapse-CDC
   - package-ecosystem: "cargo"
     directory: "/tools/synapse-cdc"
     schedule:
-      interval: "daily"
-    open-pull-requests-limit: 10
+      interval: "weekly"
+    open-pull-requests-limit: 5
     reviewers:
       - "kunaldevxxx"
     labels:
       - "dependencies"
       - "security"
       - "rust"
+    groups:
+      rust-crates:
+        patterns:
+          - "*"
 
   # Maintain Rust dependencies for Ghostwire
   - package-ecosystem: "cargo"
     directory: "/tools/ghostwire"
     schedule:
-      interval: "daily"
-    open-pull-requests-limit: 10
+      interval: "weekly"
+    open-pull-requests-limit: 5
     reviewers:
       - "kunaldevxxx"
     labels:
       - "dependencies"
       - "security"
       - "rust"
+    groups:
+      rust-crates:
+        patterns:
+          - "*"
 
   # Maintain GitHub Actions dependencies
   - package-ecosystem: "github-actions"
@@ -49,3 +65,7 @@ updates:
     labels:
       - "dependencies"
       - "ci/cd"
+    groups:
+      actions:
+        patterns:
+          - "*"
