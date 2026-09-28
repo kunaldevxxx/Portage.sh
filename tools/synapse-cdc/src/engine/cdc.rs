@@ -46,7 +46,7 @@ impl CdcRecord {
         payload: Vec<u8>,
     ) -> Self {
         let mut hasher = Sha256::new();
-        hasher.update(&lsn.to_be_bytes());
+        hasher.update(lsn.to_be_bytes());
         hasher.update(entity_key.as_bytes());
         hasher.update(&payload);
         let result = hasher.finalize();
@@ -65,7 +65,7 @@ impl CdcRecord {
 
     pub fn verify_checksum(&self) -> bool {
         let mut hasher = Sha256::new();
-        hasher.update(&self.lsn.to_be_bytes());
+        hasher.update(self.lsn.to_be_bytes());
         hasher.update(self.entity_key.as_bytes());
         hasher.update(&self.payload);
         let result = hasher.finalize();

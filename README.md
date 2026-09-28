@@ -24,16 +24,16 @@ The **Portage Platform** eliminates downtime by orchestrating **three mathematic
 
 ## Competitive Analysis & Architectural Differentiation
 
-| Capability / Metric | Portage Platform (Our Suite) | Velero (VMware) | PV-Migrate | Debezium + Kafka | Istio / Envoy Cutover | Manual Rsync / Dump |
-| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| **Zero Application Downtime ($RTO \approx 0$)** | :white_check_mark: **Sub-second** | :x: Minutes / Hours | :x: Workload Offline | :warning: Data only | :warning: Traffic only | :x: Hours of Downtime |
-| **Zero Data Loss Guarantee ($RPO = 0$)** | :white_check_mark: **Continuous Sync** | :x: Snapshot Gap | :x: Point-in-time | :white_check_mark: Continuous | :heavy_minus_sign: N/A | :x: Large Data Loss Gap |
-| **In-Flight TCP Connection Preservation** | :white_check_mark: **Zero RST Drops** | :x: Terminated | :x: Terminated | :heavy_minus_sign: N/A | :warning: Config Dependent | :x: Terminated |
-| **Cryptographic Merkle State Proof** | :white_check_mark: **SHA-256 ($P < 2^{-256}$)** | :x: None | :x: None (Blind Copy) | :x: None | :heavy_minus_sign: N/A | :x: Manual Checksums |
-| **Kubernetes AST API Translation** | :white_check_mark: **Automated Ingress/Workload** | :x: None | :x: None | :heavy_minus_sign: N/A | :heavy_minus_sign: N/A | :x: Manual YAML Edits |
-| **Database Quiescence Window** | :white_check_mark: **< 1.5 Seconds** | :x: Snapshot Duration | :x: Full Rsync Window | :heavy_minus_sign: N/A | :heavy_minus_sign: N/A | :x: Full Dump Window |
-| **Sovereign Air-Gapped Enforcement** | :white_check_mark: **Zero External Egress** | :warning: Plugin Dependent | :warning: Image Pulls | :x: Complex Clusters | :warning: Heavy Footprint | :white_check_mark: Scripted |
-| **Unified Monorepo Coordination** | :white_check_mark: **Integrated Trinity** | :x: Storage Only | :x: Storage Only | :x: Data Only | :x: Traffic Only | :x: Disjointed Scripts |
+| Capability / Metric | Portage Platform | Velero (VMware) | PV-Migrate | Debezium + Kafka | Istio / Envoy Cutover | Manual Rsync / Dump |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **Application Downtime ($RTO$)** | **Sub-second (< 1.5s)** | Minutes to Hours | Workload Offline | Minutes (Data Only) | Seconds (Traffic Only) | Hours of Downtime |
+| **Data Loss Guarantee ($RPO$)** | **Continuous ($RPO = 0$)** | Snapshot Gap | Point-in-Time Loss | Continuous Sync | Not Applicable | High Data Loss Risk |
+| **In-Flight TCP Connection Preservation** | **Zero RST Drops** | Terminated | Terminated | Not Applicable | Configuration Dependent | Terminated / Aborted |
+| **Cryptographic Merkle State Proof** | **SHA-256 ($P < 2^{-256}$)** | None | None (Blind Copy) | None | Not Applicable | Manual Checksums |
+| **Kubernetes AST API Modernization** | **Automated AST Rewrite** | None | None | Not Applicable | Not Applicable | Manual YAML Edits |
+| **Database Quiescence Window** | **< 1.5 Seconds** | Snapshot Duration | Full Rsync Window | Not Applicable | Not Applicable | Full Dump Window |
+| **Sovereign Air-Gapped Enforcement** | **Zero External Egress** | Plugin Dependent | Image Pulls Required | High Complexity | Heavy Footprint | Script Dependent |
+| **Unified System Coordination** | **Tri-Engine Orchestration** | Storage Only | Storage Only | Data Only | Traffic Only | Disjointed Scripts |
 
 ---
 
@@ -131,20 +131,20 @@ sequenceDiagram
     CDC->>Portage: Verify SHA-256 Merkle root equivalence
 
     Note over Portage,Src: Phase 3: Quiescence Barrier (< 1.5s window)
-    Portage->>Src: PreQuiesce: CHECKPOINT; FLUSH TABLES WITH READ LOCK;
+    Portage->>Src: PreQuiesce: CHECKPOINT and FLUSH TABLES WITH READ LOCK
     Portage->>Src: Request CSI VolumeSnapshot
     Portage->>Portage: Await VolumeSnapshot status.readyToUse == true
     Portage->>Src: PostQuiesce: UNLOCK TABLES (Immediate write release)
 
     Note over Portage,Tgt: Phase 4: AST Transformation & Workload Deployment
-    Portage->>Portage: Morph AST (extensions/v1beta1 -> networking.k8s.io/v1)
+    Portage->>Portage: Transform AST from extensions/v1beta1 to networking.k8s.io/v1
     Portage->>Tgt: Provision Target PVC from CSI Snapshot DataSource
     Portage->>Tgt: Deploy modernized StatefulSet & Ingress manifests
     Portage->>Tgt: Await Target pods ready & verified
 
     Note over GW,Tgt: Phase 5: Zero-Drop Traffic Cutover
     Portage->>GW: Execute cutover (Route: Target, Drain: 15s)
-    GW->>GW: Atomic route pointer swap (New sessions -> Target)
+    GW->>GW: Atomic route pointer swap (New sessions routed to Target)
     GW->>Src: Allow active in-flight sessions to drain cleanly (No TCP RST)
     GW->>Tgt: Route 100% of new client connections to Target
 

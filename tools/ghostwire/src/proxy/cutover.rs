@@ -24,6 +24,7 @@ pub enum RoutingTarget {
     TargetCluster,
 }
 
+#[allow(dead_code)]
 pub struct ProxyMetrics {
     pub active_connections: Arc<AtomicUsize>,
     pub total_routed_source: Arc<AtomicUsize>,
@@ -70,6 +71,10 @@ impl CutoverDirector {
         } else {
             RoutingTarget::SourceCluster
         }
+    }
+
+    pub fn metrics(&self) -> &ProxyMetrics {
+        &self.metrics
     }
 
     /// Triggers atomic cutover to the target cluster backend and drains in-flight source connections.

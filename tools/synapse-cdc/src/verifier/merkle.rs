@@ -21,6 +21,7 @@ pub struct MerkleNode {
 /// storage volumes or database partitions in air-gapped environments.
 pub struct MerkleTree {
     root: MerkleNode,
+    #[allow(dead_code)]
     leaves_count: usize,
 }
 
@@ -51,15 +52,15 @@ impl MerkleTree {
         let leaves_count = nodes.len();
 
         while nodes.len() > 1 {
-            let mut next_level = Vec::with_capacity((nodes.len() + 1) / 2);
+            let mut next_level = Vec::with_capacity(nodes.len().div_ceil(2));
             for chunk in nodes.chunks(2) {
                 if chunk.len() == 2 {
                     let left = &chunk[0];
                     let right = &chunk[1];
                     let mut hasher = Sha256::new();
                     hasher.update(b"NODE:");
-                    hasher.update(&left.hash);
-                    hasher.update(&right.hash);
+                    hasher.update(left.hash);
+                    hasher.update(right.hash);
                     let result = hasher.finalize();
                     let mut parent_hash = [0u8; 32];
                     parent_hash.copy_from_slice(&result);
@@ -74,8 +75,8 @@ impl MerkleTree {
                     let left = &chunk[0];
                     let mut hasher = Sha256::new();
                     hasher.update(b"NODE:");
-                    hasher.update(&left.hash);
-                    hasher.update(&left.hash);
+                    hasher.update(left.hash);
+                    hasher.update(left.hash);
                     let result = hasher.finalize();
                     let mut parent_hash = [0u8; 32];
                     parent_hash.copy_from_slice(&result);
@@ -94,6 +95,11 @@ impl MerkleTree {
             root: nodes.into_iter().next().unwrap(),
             leaves_count,
         })
+    }
+
+    /// Returns the number of leaves in the Merkle tree
+    pub fn leaves_count(&self) -> usize {
+        self.leaves_count
     }
 
     /// Returns the 256-bit cryptographic root state digest

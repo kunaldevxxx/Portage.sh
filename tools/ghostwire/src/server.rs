@@ -6,6 +6,7 @@ use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 
+#[allow(dead_code)]
 #[derive(Deserialize)]
 pub struct CutoverApiRequest {
     pub route_id: String,

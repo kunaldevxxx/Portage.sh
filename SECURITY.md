@@ -10,10 +10,10 @@ The Portage Platform (`Portage.sh`, `Synapse-CDC`, `Ghostwire`) is designed for 
 
 Only the latest active major/minor release tracks receive security updates and CVE patches:
 
-| Version | Supported          | Security Maintenance Status |
-| ------- | ------------------ | --------------------------- |
-| 1.0.x   | :white_check_mark: | Full Active Support         |
-| < 1.0   | :x:                | Unsupported                 |
+| Version | Supported | Security Maintenance Status |
+| :--- | :--- | :--- |
+| 1.0.x | Yes | Full Active Support |
+| < 1.0 | No | Unsupported |
 
 ---
 

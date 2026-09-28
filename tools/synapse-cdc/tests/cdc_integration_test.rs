@@ -61,6 +61,7 @@ async fn test_merkle_tree_mathematical_verification() {
 
     let source_merkle =
         MerkleTree::build(&source_data).expect("Failed building source Merkle tree");
+    assert_eq!(source_merkle.leaves_count(), 4);
     let source_root = source_merkle.root_hash();
 
     // 2. Identical target dataset
