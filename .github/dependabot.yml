@@ -1,0 +1,51 @@
+version: 2
+updates:
+  # Maintain Go dependencies for Portage Operator
+  - package-ecosystem: "gomod"
+    directory: "/tools/portage"
+    schedule:
+      interval: "daily"
+    open-pull-requests-limit: 10
+    reviewers:
+      - "kunaldevxxx"
+    labels:
+      - "dependencies"
+      - "security"
+      - "go"
+
+  # Maintain Rust dependencies for Synapse-CDC
+  - package-ecosystem: "cargo"
+    directory: "/tools/synapse-cdc"
+    schedule:
+      interval: "daily"
+    open-pull-requests-limit: 10
+    reviewers:
+      - "kunaldevxxx"
+    labels:
+      - "dependencies"
+      - "security"
+      - "rust"
+
+  # Maintain Rust dependencies for Ghostwire
+  - package-ecosystem: "cargo"
+    directory: "/tools/ghostwire"
+    schedule:
+      interval: "daily"
+    open-pull-requests-limit: 10
+    reviewers:
+      - "kunaldevxxx"
+    labels:
+      - "dependencies"
+      - "security"
+      - "rust"
+
+  # Maintain GitHub Actions dependencies
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    reviewers:
+      - "kunaldevxxx"
+    labels:
+      - "dependencies"
+      - "ci/cd"

@@ -1,0 +1,76 @@
+name: "Release"
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-release:
+    name: "Build Release Binaries"
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+          - goos: darwin
+            goarch: arm64
+    steps:
+      - name: "Checkout Code"
+        uses: actions/checkout@v4
+
+      - name: "Setup Go"
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+
+      - name: "Compile Portage Operator"
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 0
+        run: |
+          cd tools/portage
+          mkdir -p ../../bin
+          go build -ldflags="-s -w -X main.version=${{ github.ref_name }}" -o ../../bin/portage-operator-${{ matrix.goos }}-${{ matrix.goarch }} ./main.go
+
+      - name: "Upload Artifacts"
+        uses: actions/upload-artifact@v4
+        with:
+          name: binaries-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: bin/
+
+  publish-release:
+    name: "Publish GitHub Release"
+    needs: build-release
+    runs-on: ubuntu-latest
+    steps:
+      - name: "Checkout Code"
+        uses: actions/checkout@v4
+
+      - name: "Download All Binaries"
+        uses: actions/download-artifact@v4
+        with:
+          path: release-bin/
+          merge-multiple: true
+
+      - name: "Generate SHA256 Checksums"
+        run: |
+          cd release-bin
+          sha256sum * > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: "Create GitHub Release"
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            release-bin/*
+          draft: false
+          prerelease: false
+          generate_release_notes: true
