@@ -1,6 +1,6 @@
+use async_trait::async_trait;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
-use async_trait::async_trait;
 use synapse_cdc::engine::cdc::*;
 use synapse_cdc::verifier::merkle::*;
 use tokio::sync::Mutex;
@@ -35,7 +35,9 @@ impl TargetApplier for MockTargetApplier {
     async fn apply_record(&mut self, record: &CdcRecord) -> Result<(), EngineError> {
         let count = self.failure_counter.fetch_add(1, Ordering::SeqCst);
         if self.fail_every_n > 0 && count % self.fail_every_n == 0 {
-            return Err(EngineError::TargetError("Simulated transient socket reset".into()));
+            return Err(EngineError::TargetError(
+                "Simulated transient socket reset".into(),
+            ));
         }
         self.applied_records.lock().await.push(record.clone());
         Ok(())
@@ -57,12 +59,14 @@ async fn test_merkle_tree_mathematical_verification() {
         b"user:1004:balance:3400".to_vec(),
     ];
 
-    let source_merkle = MerkleTree::build(&source_data).expect("Failed building source Merkle tree");
+    let source_merkle =
+        MerkleTree::build(&source_data).expect("Failed building source Merkle tree");
     let source_root = source_merkle.root_hash();
 
     // 2. Identical target dataset
     let target_data_identical = source_data.clone();
-    let target_merkle = MerkleTree::build(&target_data_identical).expect("Failed building target Merkle tree");
+    let target_merkle =
+        MerkleTree::build(&target_data_identical).expect("Failed building target Merkle tree");
     assert!(
         source_merkle.verify_integrity(&target_merkle.root_hash()),
         "Identical datasets must yield matching Merkle root hashes"
@@ -71,8 +75,9 @@ async fn test_merkle_tree_mathematical_verification() {
     // 3. Mutated target dataset (1 byte tampered, e.g. balance modified)
     let mut target_data_tampered = source_data.clone();
     target_data_tampered[2] = b"user:1003:balance:98501".to_vec();
-    let tampered_merkle = MerkleTree::build(&target_data_tampered).expect("Failed building tampered Merkle tree");
-    
+    let tampered_merkle =
+        MerkleTree::build(&target_data_tampered).expect("Failed building tampered Merkle tree");
+
     assert!(
         !source_merkle.verify_integrity(&tampered_merkle.root_hash()),
         "Tampered dataset must be mathematically detected by Merkle divergence"
@@ -115,7 +120,7 @@ async fn test_cdc_streaming_pipeline_resilience_and_ordering() {
         max_backoff_ms: 10,
     };
     let engine = CdcReplicationEngine::new(config);
-    let (shutdown_tx, shutdown_rx) = tokio::sync::broadcast::channel(1);
+    let (_shutdown_tx, shutdown_rx) = tokio::sync::broadcast::channel(1);
 
     let committed_lsn = engine
         .run_pipeline(streamer, applier, shutdown_rx)
@@ -128,6 +133,10 @@ async fn test_cdc_streaming_pipeline_resilience_and_ordering() {
     let applied = applied_records.lock().await;
     assert_eq!(applied.len(), num_records);
     for (idx, record) in applied.iter().enumerate() {
-        assert_eq!(record.lsn, (idx + 1) as u64, "Strict LSN ordering must be preserved");
+        assert_eq!(
+            record.lsn,
+            (idx + 1) as u64,
+            "Strict LSN ordering must be preserved"
+        );
     }
 }

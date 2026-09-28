@@ -1,9 +1,9 @@
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Arc;
-use std::time::Duration;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
+use std::time::Duration;
 use thiserror::Error;
 use tokio::sync::mpsc;
 use tokio::time::sleep;
@@ -38,7 +38,13 @@ pub struct CdcRecord {
 }
 
 impl CdcRecord {
-    pub fn new(lsn: u64, timestamp_ms: u64, entity_key: String, operation: Operation, payload: Vec<u8>) -> Self {
+    pub fn new(
+        lsn: u64,
+        timestamp_ms: u64,
+        entity_key: String,
+        operation: Operation,
+        payload: Vec<u8>,
+    ) -> Self {
         let mut hasher = Sha256::new();
         hasher.update(&lsn.to_be_bytes());
         hasher.update(entity_key.as_bytes());

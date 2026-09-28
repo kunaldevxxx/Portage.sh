@@ -41,7 +41,11 @@ pub struct CutoverDirector {
 }
 
 impl CutoverDirector {
-    pub fn new(listen_addr: SocketAddr, source_backend: SocketAddr, target_backend: SocketAddr) -> Self {
+    pub fn new(
+        listen_addr: SocketAddr,
+        source_backend: SocketAddr,
+        target_backend: SocketAddr,
+    ) -> Self {
         let active = Arc::new(AtomicUsize::new(0));
         let metrics = ProxyMetrics {
             active_connections: active.clone(),
@@ -97,7 +101,10 @@ impl CutoverDirector {
     }
 
     /// Serves proxy connections asynchronously with zero packet loss.
-    pub async fn run_server(&self, mut shutdown_rx: watch::Receiver<bool>) -> Result<(), ProxyError> {
+    pub async fn run_server(
+        &self,
+        mut shutdown_rx: watch::Receiver<bool>,
+    ) -> Result<(), ProxyError> {
         let listener = TcpListener::bind(self.listen_addr)
             .await
             .map_err(|e| ProxyError::BindError(self.listen_addr, e))?;

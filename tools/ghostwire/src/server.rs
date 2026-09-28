@@ -1,10 +1,10 @@
+use crate::proxy::cutover::CutoverDirector;
+use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
-use serde::{Deserialize, Serialize};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
-use crate::proxy::cutover::CutoverDirector;
 
 #[derive(Deserialize)]
 pub struct CutoverApiRequest {
@@ -31,7 +31,10 @@ pub struct GhostwireServer {
 
 impl GhostwireServer {
     pub fn new(mgmt_addr: SocketAddr, director: Arc<CutoverDirector>) -> Self {
-        Self { mgmt_addr, director }
+        Self {
+            mgmt_addr,
+            director,
+        }
     }
 
     pub async fn run(&self) -> Result<(), std::io::Error> {
@@ -48,7 +51,10 @@ impl GhostwireServer {
     }
 }
 
-async fn handle_mgmt_request(mut stream: TcpStream, director: Arc<CutoverDirector>) -> Result<(), std::io::Error> {
+async fn handle_mgmt_request(
+    mut stream: TcpStream,
+    director: Arc<CutoverDirector>,
+) -> Result<(), std::io::Error> {
     let mut buf = [0u8; 4096];
     let n = stream.read(&mut buf).await?;
     if n == 0 {

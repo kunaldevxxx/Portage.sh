@@ -1,10 +1,10 @@
+use crate::verifier::merkle::MerkleTree;
+use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
 use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU64, Ordering};
 use std::sync::Arc;
-use serde::{Deserialize, Serialize};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
-use crate::verifier::merkle::MerkleTree;
 
 #[derive(Serialize, Deserialize)]
 pub struct StartRequest {
@@ -77,7 +77,10 @@ impl CdcHttpServer {
     }
 }
 
-async fn handle_http_connection(mut stream: TcpStream, state: Arc<CdcServerState>) -> Result<(), std::io::Error> {
+async fn handle_http_connection(
+    mut stream: TcpStream,
+    state: Arc<CdcServerState>,
+) -> Result<(), std::io::Error> {
     let mut buf = [0u8; 4096];
     let n = stream.read(&mut buf).await?;
     if n == 0 {
@@ -102,7 +105,9 @@ async fn handle_http_connection(mut stream: TcpStream, state: Arc<CdcServerState
     let (status_code, body) = match (method, path) {
         ("POST", p) if p.starts_with("/v1/replication/start") => {
             state.replication_running.store(true, Ordering::Release);
-            let resp = StartResponse { status: "started".into() };
+            let resp = StartResponse {
+                status: "started".into(),
+            };
             (200, serde_json::to_string(&resp).unwrap())
         }
         ("POST", p) if p.starts_with("/v1/replication/verify") => {

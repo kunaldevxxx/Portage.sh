@@ -1,15 +1,17 @@
-use std::net::SocketAddr;
-use std::sync::Arc;
 use ghostwire::proxy::cutover::CutoverDirector;
 use ghostwire::server::GhostwireServer;
+use std::net::SocketAddr;
+use std::sync::Arc;
 use tokio::sync::watch;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let proxy_port = std::env::var("PROXY_PORT").unwrap_or_else(|_| "80".into());
     let mgmt_port = std::env::var("MGMT_PORT").unwrap_or_else(|_| "8080".into());
-    let source_backend = std::env::var("SOURCE_BACKEND").unwrap_or_else(|_| "127.0.0.1:8001".into());
-    let target_backend = std::env::var("TARGET_BACKEND").unwrap_or_else(|_| "127.0.0.1:8002".into());
+    let source_backend =
+        std::env::var("SOURCE_BACKEND").unwrap_or_else(|_| "127.0.0.1:8001".into());
+    let target_backend =
+        std::env::var("TARGET_BACKEND").unwrap_or_else(|_| "127.0.0.1:8002".into());
 
     let proxy_addr: SocketAddr = format!("0.0.0.0:{}", proxy_port).parse()?;
     let mgmt_addr: SocketAddr = format!("0.0.0.0:{}", mgmt_port).parse()?;

@@ -1,6 +1,6 @@
+use ghostwire::proxy::cutover::*;
 use std::net::SocketAddr;
 use std::time::Duration;
-use ghostwire::proxy::cutover::*;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
 use tokio::sync::watch;
@@ -10,20 +10,18 @@ async fn spawn_echo_server(prefix: &'static str) -> SocketAddr {
     let addr = listener.local_addr().unwrap();
 
     tokio::spawn(async move {
-        loop {
-            if let Ok((mut stream, _)) = listener.accept().await {
-                tokio::spawn(async move {
-                    let mut buf = [0u8; 1024];
-                    while let Ok(n) = stream.read(&mut buf).await {
-                        if n == 0 {
-                            break;
-                        }
-                        let mut response = prefix.as_bytes().to_vec();
-                        response.extend_from_slice(&buf[..n]);
-                        let _ = stream.write_all(&response).await;
+        while let Ok((mut stream, _)) = listener.accept().await {
+            tokio::spawn(async move {
+                let mut buf = [0u8; 1024];
+                while let Ok(n) = stream.read(&mut buf).await {
+                    if n == 0 {
+                        break;
                     }
-                });
-            }
+                    let mut response = prefix.as_bytes().to_vec();
+                    response.extend_from_slice(&buf[..n]);
+                    let _ = stream.write_all(&response).await;
+                }
+            });
         }
     });
 
@@ -52,7 +50,9 @@ async fn test_zero_loss_traffic_cutover() {
     tokio::time::sleep(Duration::from_millis(50)).await;
 
     // 3. Connect Client A before cutover (must hit SOURCE)
-    let mut client_a = tokio::net::TcpStream::connect(proxy_addr).await.expect("Client A connection failed");
+    let mut client_a = tokio::net::TcpStream::connect(proxy_addr)
+        .await
+        .expect("Client A connection failed");
     client_a.write_all(b"payload_alpha").await.unwrap();
     let mut resp_a = [0u8; 64];
     let n_a = client_a.read(&mut resp_a).await.unwrap();
@@ -75,7 +75,9 @@ async fn test_zero_loss_traffic_cutover() {
     drop(client_a);
 
     // 6. Connect Client B after cutover (must hit TARGET)
-    let mut client_b = tokio::net::TcpStream::connect(proxy_addr).await.expect("Client B connection failed");
+    let mut client_b = tokio::net::TcpStream::connect(proxy_addr)
+        .await
+        .expect("Client B connection failed");
     client_b.write_all(b"payload_beta").await.unwrap();
     let mut resp_b = [0u8; 64];
     let n_b = client_b.read(&mut resp_b).await.unwrap();
