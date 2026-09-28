@@ -1,4 +1,4 @@
-# Portage Platform: Enterprise Zero-Downtime Migration Suite
+# Portage Platform: Zero-Downtime Migration Suite
 
 [![CI Status](https://github.com/kunaldevxxx/Portage.sh/actions/workflows/ci.yml/badge.svg)](https://github.com/kunaldevxxx/Portage.sh/actions/workflows/ci.yml)
 [![Security Audits](https://github.com/kunaldevxxx/Portage.sh/actions/workflows/security.yml/badge.svg)](https://github.com/kunaldevxxx/Portage.sh/actions/workflows/security.yml)
