@@ -34,7 +34,7 @@ struct MockTargetApplier {
 impl TargetApplier for MockTargetApplier {
     async fn apply_record(&mut self, record: &CdcRecord) -> Result<(), EngineError> {
         let count = self.failure_counter.fetch_add(1, Ordering::SeqCst);
-        if self.fail_every_n > 0 && count % self.fail_every_n == 0 {
+        if self.fail_every_n > 0 && count.is_multiple_of(self.fail_every_n) {
             return Err(EngineError::TargetError(
                 "Simulated transient socket reset".into(),
             ));
@@ -68,9 +68,14 @@ async fn test_merkle_tree_mathematical_verification() {
     let target_data_identical = source_data.clone();
     let target_merkle =
         MerkleTree::build(&target_data_identical).expect("Failed building target Merkle tree");
+    assert_eq!(source_root, target_merkle.root_hash());
     assert!(
         source_merkle.verify_integrity(&target_merkle.root_hash()),
         "Identical datasets must yield matching Merkle root hashes"
+    );
+    assert!(
+        target_merkle.verify_integrity(&source_root),
+        "Target Merkle tree must verify against source root hash"
     );
 
     // 3. Mutated target dataset (1 byte tampered, e.g. balance modified)

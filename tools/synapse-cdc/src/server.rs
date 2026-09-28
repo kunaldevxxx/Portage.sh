@@ -6,6 +6,7 @@ use std::sync::Arc;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 
+#[allow(dead_code)]
 #[derive(Serialize, Deserialize)]
 pub struct StartRequest {
     pub stream_id: String,
@@ -16,6 +17,7 @@ pub struct StartResponse {
     pub status: String,
 }
 
+#[allow(dead_code)]
 #[derive(Serialize, Deserialize)]
 pub struct VerifyRequest {
     pub stream_id: String,
