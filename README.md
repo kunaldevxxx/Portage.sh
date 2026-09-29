@@ -41,7 +41,7 @@ The Portage Platform is architected on an **Open-Core foundation**:
 | **Pluggable Driver Registry (SPI)** | Included | Included |
 | **Replication Driver** | `community-cdc` (Snapshot Polling) | `enterprise-synapse` (Continuous WAL + Merkle Proofs) |
 | **Traffic Cutover Driver** | `community-cutover` (Service Selector Swap) | `enterprise-ghostwire` (Zero-RST Kernel TCP Splicer) |
-| **Mathematical State Proof** | Basic Checksum | Cryptographic SHA-256 Merkle Tree ($O(\log N)$ |
+| **Mathematical State Proof** | Basic Checksum | Cryptographic SHA-256 Merkle Tree ($O(\log N)$) |
 | **Connection Preservation** | Transient Resets | Zero RST Dropped Packets |
 
 ---
@@ -467,8 +467,7 @@ The Business Source License 1.1 explicitly protects the platform from unauthoriz
 
 ---
 
-## Compliance
-
+## Sovereign Air-Gapped Compliance
 
 1. **Zero Egress / Zero Telemetry Guarantee:**
    - The binaries and container images contain zero phone-home mechanisms, analytics collectors, or external DNS lookups.
