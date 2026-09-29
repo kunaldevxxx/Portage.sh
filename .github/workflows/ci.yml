@@ -46,40 +46,6 @@ jobs:
           path: tools/portage/coverage.out
           if-no-files-found: ignore
 
-  rust-ci:
-    name: "Rust Test & Lint (Synapse-CDC & Ghostwire)"
-    runs-on: ubuntu-latest
-    steps:
-      - name: "Checkout Code"
-        uses: actions/checkout@v4
-
-      - name: "Setup Rust Toolchain"
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          components: clippy, rustfmt
-
-      - name: "Cargo Cache"
-        uses: actions/cache@v6
-        with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.toml') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-
-
-      - name: "Check Code Formatting"
-        run: cargo fmt --all -- --check
-
-      - name: "Clippy Linter"
-        run: cargo clippy --workspace --all-targets -- -D warnings
-
-      - name: "Run Workspace Unit & Integration Tests"
-        run: cargo test --workspace --verbose
-
   security-audit:
     name: "Security, Secrets & Vulnerability Audits"
     runs-on: ubuntu-latest

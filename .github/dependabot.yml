@@ -21,40 +21,6 @@ updates:
         patterns:
           - "*"
 
-  # Maintain Rust dependencies for Synapse-CDC
-  - package-ecosystem: "cargo"
-    directory: "/tools/synapse-cdc"
-    schedule:
-      interval: "weekly"
-    open-pull-requests-limit: 5
-    reviewers:
-      - "kunaldevxxx"
-    labels:
-      - "dependencies"
-      - "security"
-      - "rust"
-    groups:
-      rust-crates:
-        patterns:
-          - "*"
-
-  # Maintain Rust dependencies for Ghostwire
-  - package-ecosystem: "cargo"
-    directory: "/tools/ghostwire"
-    schedule:
-      interval: "weekly"
-    open-pull-requests-limit: 5
-    reviewers:
-      - "kunaldevxxx"
-    labels:
-      - "dependencies"
-      - "security"
-      - "rust"
-    groups:
-      rust-crates:
-        patterns:
-          - "*"
-
   # Maintain GitHub Actions dependencies
   - package-ecosystem: "github-actions"
     directory: "/"
