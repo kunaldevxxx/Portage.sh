@@ -2,15 +2,6 @@ name: "Clean Workflow Runs"
 
 on:
   workflow_dispatch:
-    inputs:
-      save_period_days:
-        description: "Number of days of runs to keep (0 = delete all runs older than today)"
-        required: false
-        default: "0"
-      save_min_runs:
-        description: "Minimum number of latest runs to keep per workflow"
-        required: false
-        default: "1"
   schedule:
     # Run weekly on Sunday at 00:00 UTC
     - cron: '0 0 * * 0'
@@ -20,19 +11,30 @@ permissions:
   contents: read
 
 jobs:
-  cleanup-runs:
-    name: "Clean Historical Workflow Runs"
+  purge-runs:
+    name: "Purge All Past Workflow Runs"
     runs-on: ubuntu-latest
     steps:
-      - name: "Clean workflow runs"
-        uses: dmvict/clean-workflow-runs@v1
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          save_period: ${{ inputs.save_period_days || 0 }}
-          save_min_runs_number: ${{ inputs.save_min_runs || 1 }}
-          run_conclusions: |
-            success
-            failure
-            cancelled
-            timed_out
-            skipped
+      - name: "Delete All Past Workflow Runs"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CURRENT_RUN_ID: ${{ github.run_id }}
+          REPO: ${{ github.repository }}
+        run: |
+          echo "==> Fetching all workflow runs for $REPO..."
+          run_ids=$(gh run list --repo "$REPO" --limit 100 --json databaseId -q '.[].databaseId')
+
+          if [ -z "$run_ids" ]; then
+            echo "No workflow runs found to delete."
+            exit 0
+          fi
+
+          count=0
+          for id in $run_ids; do
+            if [ "$id" != "$CURRENT_RUN_ID" ]; then
+              echo "Deleting workflow run #$id..."
+              gh run delete "$id" --repo "$REPO" || true
+              count=$((count + 1))
+            fi
+          done
+          echo "==> Successfully purged $count workflow runs!"
