@@ -1,0 +1,60 @@
+name: "Bug Report"
+description: "File an issue describing a defect or unexpected behavior in the platform"
+title: "[BUG]: "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for reporting an issue! Please ensure that this report does not contain sensitive or confidential data.
+        For security vulnerabilities, please refer to our [Security Policy](https://github.com/kunaldevxxx/Portage.sh/blob/main/SECURITY.md).
+  - type: dropdown
+    id: component
+    attributes:
+      label: Affected Component
+      description: Which part of the platform is affected?
+      options:
+        - "Portage.sh (Kubernetes Operator & AST Engine)"
+        - "Synapse-CDC (WAL Replicator & Merkle Verifier)"
+        - "Ghostwire (Cutover Proxy & Connection Drainer)"
+        - "Shared Protocols / Integration Clients"
+        - "Build / CI/CD"
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: Bug Description
+      description: A clear and concise description of what the bug is.
+      placeholder: Describe what happened versus what you expected to happen.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to Reproduce
+      description: Detailed steps to reproduce the behavior.
+      placeholder: |
+        1. Deploy source StatefulSet with YAML ...
+        2. Apply PortageMigration CR ...
+        3. Observe controller logs ...
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment Information
+      description: Operating system, Kubernetes version, CSI storage provider, toolchain versions.
+      placeholder: |
+        - Kubernetes Version: v1.30.0
+        - Go Version: go1.22.0
+        - Rust Version: 1.78.0
+        - Storage CSI Driver: aws-ebs-csi-driver
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant Logs & Output
+      description: Attach relevant controller logs or error outputs.
+      render: shell

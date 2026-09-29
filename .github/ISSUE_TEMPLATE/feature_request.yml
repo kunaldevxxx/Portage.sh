@@ -1,0 +1,41 @@
+name: "Feature Request"
+description: "Suggest an idea or architectural capability for the zero-downtime platform"
+title: "[FEATURE]: "
+labels: ["enhancement", "feature"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        We welcome architectural proposals that improve resiliency, throughput, or zero-downtime guarantees.
+  - type: dropdown
+    id: plane
+    attributes:
+      label: Target Architecture Plane
+      options:
+        - "Control Plane (Portage.sh / K8s Operator)"
+        - "Data Plane (Synapse-CDC / Storage Sync)"
+        - "Traffic Plane (Ghostwire / Network Cutover)"
+        - "Cross-Plane Coordination"
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem Statement
+      description: Is your feature request related to a specific limitation or enterprise requirement?
+      placeholder: Describe the architectural context and problem you are trying to solve.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed Solution
+      description: Detailed architectural description of how this capability should work.
+      placeholder: Describe the interfaces, protocols, or CRD additions you propose.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: Any alternative approaches or tradeoffs evaluated.

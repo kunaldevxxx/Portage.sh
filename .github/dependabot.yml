@@ -1,0 +1,37 @@
+version: 2
+updates:
+  # Maintain Go dependencies for Portage Operator
+  - package-ecosystem: "gomod"
+    directory: "/tools/portage"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "kunaldevxxx"
+    labels:
+      - "dependencies"
+      - "security"
+      - "go"
+    groups:
+      kubernetes:
+        patterns:
+          - "k8s.io/*"
+          - "sigs.k8s.io/*"
+      common:
+        patterns:
+          - "*"
+
+  # Maintain GitHub Actions dependencies
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    reviewers:
+      - "kunaldevxxx"
+    labels:
+      - "dependencies"
+      - "ci/cd"
+    groups:
+      actions:
+        patterns:
+          - "*"

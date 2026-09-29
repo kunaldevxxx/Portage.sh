@@ -1,0 +1,314 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: portagemigrations.migration.portage.sh
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.14.0
+spec:
+  group: migration.portage.sh
+  names:
+    kind: PortageMigration
+    listKind: PortageMigrationList
+    plural: portagemigrations
+    singular: portagemigration
+    shortNames:
+      - pm
+      - portage
+  scope: Namespaced
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      subresources:
+        status: {}
+      additionalPrinterColumns:
+        - name: Phase
+          type: string
+          jsonPath: .status.phase
+          description: Current lifecycle phase of the migration
+        - name: Lag
+          type: integer
+          jsonPath: .status.replicationLagSeconds
+          description: Current replication lag in seconds
+        - name: Merkle
+          type: boolean
+          jsonPath: .status.merkleVerified
+          description: Cryptographic state equivalence verified
+        - name: Age
+          type: date
+          jsonPath: .metadata.creationTimestamp
+      schema:
+        openAPIV3Schema:
+          type: object
+          description: PortageMigration orchestrates zero-downtime stateful migrations across Kubernetes clusters.
+          properties:
+            apiVersion:
+              type: string
+            kind:
+              type: string
+            metadata:
+              type: object
+            spec:
+              type: object
+              required:
+                - sourceWorkload
+                - sourceNamespace
+                - targetNamespace
+                - volumeMigration
+              properties:
+                sourceWorkload:
+                  type: object
+                  required:
+                    - kind
+                    - name
+                  properties:
+                    apiGroup:
+                      type: string
+                    kind:
+                      type: string
+                    name:
+                      type: string
+                sourceNamespace:
+                  type: string
+                targetNamespace:
+                  type: string
+                targetCluster:
+                  type: object
+                  required:
+                    - apiServerUrl
+                    - secretRef
+                  properties:
+                    apiServerUrl:
+                      type: string
+                    insecureSkipTlsVerify:
+                      type: boolean
+                    secretRef:
+                      type: object
+                      required:
+                        - name
+                      properties:
+                        name:
+                          type: string
+                        namespace:
+                          type: string
+                preQuiesceHooks:
+                  type: array
+                  items:
+                    type: object
+                    required:
+                      - name
+                      - type
+                    properties:
+                      name:
+                        type: string
+                      type:
+                        type: string
+                        enum:
+                          - PodExec
+                          - HTTP
+                          - gRPC
+                      timeoutSeconds:
+                        type: integer
+                      maxRetries:
+                        type: integer
+                      podExec:
+                        type: object
+                        required:
+                          - selector
+                          - command
+                        properties:
+                          selector:
+                            type: object
+                          container:
+                            type: string
+                          command:
+                            type: array
+                            items:
+                              type: string
+                      http:
+                        type: object
+                        required:
+                          - url
+                          - method
+                        properties:
+                          url:
+                            type: string
+                          method:
+                            type: string
+                          headers:
+                            type: object
+                            additionalProperties:
+                              type: string
+                postQuiesceHooks:
+                  type: array
+                  items:
+                    type: object
+                    required:
+                      - name
+                      - type
+                    properties:
+                      name:
+                        type: string
+                      type:
+                        type: string
+                        enum:
+                          - PodExec
+                          - HTTP
+                          - gRPC
+                      timeoutSeconds:
+                        type: integer
+                      maxRetries:
+                        type: integer
+                      podExec:
+                        type: object
+                        required:
+                          - selector
+                          - command
+                        properties:
+                          selector:
+                            type: object
+                          container:
+                            type: string
+                          command:
+                            type: array
+                            items:
+                              type: string
+                      http:
+                        type: object
+                        required:
+                          - url
+                          - method
+                        properties:
+                          url:
+                            type: string
+                          method:
+                            type: string
+                          headers:
+                            type: object
+                            additionalProperties:
+                              type: string
+                volumeMigration:
+                  type: object
+                  required:
+                    - volumeSnapshotClassName
+                    - persistentVolumeClaimNames
+                  properties:
+                    volumeSnapshotClassName:
+                      type: string
+                    targetStorageClassName:
+                      type: string
+                    persistentVolumeClaimNames:
+                      type: array
+                      items:
+                        type: string
+                    retainOnSource:
+                      type: boolean
+                cdcReplication:
+                  type: object
+                  required:
+                    - enabled
+                    - endpoint
+                    - streamID
+                  properties:
+                    driver:
+                      type: string
+                      description: "Replication driver (e.g., enterprise-synapse or community-cdc)"
+                    enabled:
+                      type: boolean
+                    endpoint:
+                      type: string
+                    streamID:
+                      type: string
+                    requireMerkleVerification:
+                      type: boolean
+                    maxAllowedLagSeconds:
+                      type: integer
+                trafficCutover:
+                  type: object
+                  required:
+                    - enabled
+                    - directorEndpoint
+                    - routeID
+                    - targetEndpoint
+                  properties:
+                    driver:
+                      type: string
+                      description: "Cutover driver (e.g., enterprise-ghostwire or community-cutover)"
+                    enabled:
+                      type: boolean
+                    directorEndpoint:
+                      type: string
+                    routeID:
+                      type: string
+                    targetEndpoint:
+                      type: string
+                    drainTimeoutSeconds:
+                      type: integer
+                translationRules:
+                  type: array
+                  items:
+                    type: object
+                    required:
+                      - sourceAPIVersion
+                      - targetAPIVersion
+                      - kind
+                    properties:
+                      sourceAPIVersion:
+                        type: string
+                      targetAPIVersion:
+                        type: string
+                      kind:
+                        type: string
+                      customTransformName:
+                        type: string
+            status:
+              type: object
+              properties:
+                phase:
+                  type: string
+                observedGeneration:
+                  type: integer
+                conditions:
+                  type: array
+                  items:
+                    type: object
+                    required:
+                      - type
+                      - status
+                      - lastTransitionTime
+                    properties:
+                      type:
+                        type: string
+                      status:
+                        type: string
+                      lastTransitionTime:
+                        type: string
+                        format: date-time
+                      reason:
+                        type: string
+                      message:
+                        type: string
+                createdSnapshots:
+                  type: array
+                  items:
+                    type: string
+                translatedObjects:
+                  type: array
+                  items:
+                    type: string
+                replicationLagSeconds:
+                  type: integer
+                merkleVerified:
+                  type: boolean
+                cutoverCompleted:
+                  type: boolean
+                targetWorkloadReady:
+                  type: boolean
+                startTime:
+                  type: string
+                  format: date-time
+                completionTime:
+                  type: string
+                  format: date-time
+                errorMessage:
+                  type: string
