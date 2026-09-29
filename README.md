@@ -4,7 +4,7 @@
 [![Security Audits](https://github.com/kunaldevxxx/Portage.sh/actions/workflows/security.yml/badge.svg)](https://github.com/kunaldevxxx/Portage.sh/actions/workflows/security.yml)
 [![License: BSL 1.1](https://img.shields.io/badge/License-BSL%201.1%20(Non--Compete)-red.svg)](LICENSE)
 [![Go Version](https://img.shields.io/badge/Go-1.22%2B-00ADD8?logo=go)](tools/portage/go.mod)
-[![Rust Edition](https://img.shields.io/badge/Rust-2021-DEA584?logo=rust)](Cargo.toml)
+[![Architecture: Open-Core](https://img.shields.io/badge/Architecture-Open--Core%20SPI-blue.svg)](#open-core-architecture-pluggable-driver-spi)
 [![Air-Gapped Ready](https://img.shields.io/badge/Sovereign%20Enclaves-FIPS%20140--3%20Verified-success)](#sovereign-air-gapped-compliance)
 [![Code Owner](https://img.shields.io/badge/Owner-%40kunaldevxxx-orange)](.github/CODEOWNERS)
 
@@ -506,7 +506,7 @@ cd Portage.sh
 ## Local Verification & Build
 
 ```bash
-# Build all Go and Rust components
+# Build Portage.sh Kubernetes Operator (Go)
 make build
 
 # Run all unit and integration test suites
