@@ -350,28 +350,43 @@ func TestPortageMigrationFullLifecycle(t *testing.T) {
 		t.Fatalf("target StatefulSet was not created: %v", err)
 	}
 
-	// Step 9: Cutover -> Completed (Ghostwire cutover executed, traffic drained)
-	_, err = reconciler.Reconcile(ctx, req)
-	if err != nil {
-		t.Fatalf("reconcile cutover failed: %v", err)
-	}
-	if !mockCutover.CutoverExecuted {
-		t.Fatalf("expected Ghostwire traffic cutover to have been executed")
-	}
-	if mockCutover.LastRouteID != "route-pg-prod" {
-		t.Fatalf("expected route ID route-pg-prod, got %s", mockCutover.LastRouteID)
-	}
+		// Step 9: Cutover -> Verifying (Ghostwire cutover executed, moving to verification)
+		_, err = reconciler.Reconcile(ctx, req)
+		if err != nil {
+			t.Fatalf("reconcile cutover failed: %v", err)
+		}
+		if !mockCutover.CutoverExecuted {
+			t.Fatalf("expected Ghostwire traffic cutover to have been executed")
+		}
+		if mockCutover.LastRouteID != "route-pg-prod" {
+			t.Fatalf("expected route ID route-pg-prod, got %s", mockCutover.LastRouteID)
+		}
 
-	_ = fakeClient.Get(ctx, req.NamespacedName, migration)
-	if migration.Status.Phase != v1alpha1.PhaseCompleted {
-		t.Fatalf("expected Completed, got %s", migration.Status.Phase)
-	}
-	if migration.Status.CompletionTime == nil {
-		t.Fatalf("expected completionTime to be recorded")
-	}
-	if !migration.Status.CutoverCompleted {
-		t.Fatalf("expected status.cutoverCompleted to be true")
-	}
+		_ = fakeClient.Get(ctx, req.NamespacedName, migration)
+		if migration.Status.Phase != v1alpha1.PhaseVerifying {
+			t.Fatalf("expected Verifying, got %s", migration.Status.Phase)
+		}
+
+		// Step 10: Verifying -> Completed (verification passes, migration complete)
+		// Set mock health to true so verification passes
+		mockCutover.Healthy = true
+		mockCutover.DrainActiveConns = 0
+		mockCutover.DrainProgressPct = 100
+		_, err = reconciler.Reconcile(ctx, req)
+		if err != nil {
+			t.Fatalf("reconcile verifying failed: %v", err)
+		}
+
+		_ = fakeClient.Get(ctx, req.NamespacedName, migration)
+		if migration.Status.Phase != v1alpha1.PhaseCompleted {
+			t.Fatalf("expected Completed, got %s", migration.Status.Phase)
+		}
+		if migration.Status.CompletionTime == nil {
+			t.Fatalf("expected completionTime to be recorded")
+		}
+		if !migration.Status.CutoverCompleted {
+			t.Fatalf("expected status.cutoverCompleted to be true")
+		}
 }
 
 func TestPortageMigrationRollbackOnFailure(t *testing.T) {
@@ -498,19 +513,29 @@ func TestPortageMigrationDriverRegistryFallback(t *testing.T) {
 		t.Fatalf("expected PhaseQuiescing, got %s", migration.Status.Phase)
 	}
 
-	// 2. Fast-forward to PhaseCutover -> resolves community-cutover
-	migration.Status.Phase = v1alpha1.PhaseCutover
-	_ = fakeClient.Status().Update(ctx, migration)
+		// 2. Fast-forward to PhaseCutover -> resolves community-cutover
+		migration.Status.Phase = v1alpha1.PhaseCutover
+		_ = fakeClient.Status().Update(ctx, migration)
 
-	_, err = reconciler.Reconcile(ctx, req)
-	if err != nil {
-		t.Fatalf("reconcile Cutover failed: %v", err)
-	}
-	_ = fakeClient.Get(ctx, req.NamespacedName, migration)
-	if migration.Status.Phase != v1alpha1.PhaseCompleted {
-		t.Fatalf("expected PhaseCompleted, got %s", migration.Status.Phase)
-	}
-	if !migration.Status.CutoverCompleted {
-		t.Fatalf("expected CutoverCompleted=true")
-	}
+		_, err = reconciler.Reconcile(ctx, req)
+		if err != nil {
+			t.Fatalf("reconcile Cutover failed: %v", err)
+		}
+		_ = fakeClient.Get(ctx, req.NamespacedName, migration)
+		if migration.Status.Phase != v1alpha1.PhaseVerifying {
+			t.Fatalf("expected PhaseVerifying, got %s", migration.Status.Phase)
+		}
+
+		// Drive through verification to Completed
+		_, err = reconciler.Reconcile(ctx, req)
+		if err != nil {
+			t.Fatalf("reconcile Verifying failed: %v", err)
+		}
+		_ = fakeClient.Get(ctx, req.NamespacedName, migration)
+		if migration.Status.Phase != v1alpha1.PhaseCompleted {
+			t.Fatalf("expected PhaseCompleted, got %s", migration.Status.Phase)
+		}
+		if !migration.Status.CutoverCompleted {
+			t.Fatalf("expected CutoverCompleted=true")
+		}
 }

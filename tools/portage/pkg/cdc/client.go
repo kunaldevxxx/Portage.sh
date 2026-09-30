@@ -20,6 +20,7 @@ type CDCClient interface {
 	StartReplication(ctx context.Context, endpoint, streamID string) error
 	VerifyState(ctx context.Context, endpoint, streamID string) (bool, string, error)
 	GetLag(ctx context.Context, endpoint, streamID string) (int64, error)
+	GetCurrentLSN(ctx context.Context, endpoint, streamID string) (uint64, error)
 }
 
 // HTTPCDCClient communicates with Synapse-CDC daemon via HTTP.
@@ -136,6 +137,30 @@ func (c *HTTPCDCClient) GetLag(ctx context.Context, endpoint, streamID string) (
 	return status.LagSeconds, nil
 }
 
+func (c *HTTPCDCClient) GetCurrentLSN(ctx context.Context, endpoint, streamID string) (uint64, error) {
+	url := fmt.Sprintf("%s/v1/replication/status?stream_id=%s", endpoint, streamID)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return 0, err
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return 0, fmt.Errorf("CDC status request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return 0, fmt.Errorf("CDC status returned code %d", resp.StatusCode)
+	}
+
+	var status StatusResponse
+	if err := json.NewDecoder(resp.Body).Decode(&status); err != nil {
+		return 0, err
+	}
+	return status.LastLSN, nil
+}
+
 // MockCDCClient for unit and integration testing
 type MockCDCClient struct {
 	ReplicationStarted bool
@@ -171,4 +196,8 @@ func (m *MockCDCClient) VerifyState(ctx context.Context, endpoint, streamID stri
 
 func (m *MockCDCClient) GetLag(ctx context.Context, endpoint, streamID string) (int64, error) {
 	return m.LagSeconds, nil
+}
+
+func (m *MockCDCClient) GetCurrentLSN(ctx context.Context, endpoint, streamID string) (uint64, error) {
+	return uint64(m.LagSeconds), nil
 }

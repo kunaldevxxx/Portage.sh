@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -210,18 +211,25 @@ func (r *PortageMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Req
 				}
 
 				// Check lag
-				lag, err := cdcClient.GetLag(ctx, cdcSpec.Endpoint, cdcSpec.StreamID)
-				if err == nil {
-					migration.Status.ReplicationLagSeconds = lag
-					if cdcSpec.MaxAllowedLagSeconds > 0 && lag > cdcSpec.MaxAllowedLagSeconds {
-						logger.Info("Replication lag above threshold, waiting for catchup", "currentLag", lag, "maxAllowed", cdcSpec.MaxAllowedLagSeconds)
-						return ctrl.Result{RequeueAfter: 2 * time.Second}, r.Status().Update(ctx, &migration)
-					}
-				}
-			}
-		}
+						lag, err := cdcClient.GetLag(ctx, cdcSpec.Endpoint, cdcSpec.StreamID)
+						if err == nil {
+							migration.Status.ReplicationLagSeconds = lag
+							if cdcSpec.MaxAllowedLagSeconds > 0 && lag > cdcSpec.MaxAllowedLagSeconds {
+								logger.Info("Replication lag above threshold, waiting for catchup", "currentLag", lag, "maxAllowed", cdcSpec.MaxAllowedLagSeconds)
+								return ctrl.Result{RequeueAfter: 2 * time.Second}, r.Status().Update(ctx, &migration)
+							}
+						}
 
-		migration.Status.Phase = v1alpha1.PhaseQuiescing
+						// Report current WAL LSN from CDC client
+						if cdcSpec.Endpoint != "" {
+							if lsn, err := cdcClient.GetCurrentLSN(ctx, cdcSpec.Endpoint, cdcSpec.StreamID); err == nil && lsn > 0 {
+								migration.Status.CurrentWALLSN = lsn
+							}
+						}
+					}
+			}
+
+			migration.Status.Phase = v1alpha1.PhaseQuiescing
 		r.setCondition(&migration, "Quiescing", metav1.ConditionTrue, "QuiesceLocking", "Acquiring database locks and flushing tables")
 		return ctrl.Result{Requeue: true}, r.Status().Update(ctx, &migration)
 
@@ -272,6 +280,7 @@ func (r *PortageMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	case v1alpha1.PhaseSnapshotting:
 		logger.Info("Polling CSI VolumeSnapshot readiness")
 		allReady := true
+		readyCount := int64(0)
 		for _, snapName := range migration.Status.CreatedSnapshots {
 			var snap unstructured.Unstructured
 			snap.SetGroupVersionKind(schema.GroupVersionKind{
@@ -288,7 +297,10 @@ func (r *PortageMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Req
 				allReady = false
 				break
 			}
+			readyCount++
 		}
+		migration.Status.SnapshotsReadyCount = readyCount
+		migration.Status.TotalSnapshots = int64(len(migration.Status.CreatedSnapshots))
 
 		if !allReady {
 			return ctrl.Result{RequeueAfter: 2 * time.Second}, nil
@@ -409,7 +421,56 @@ func (r *PortageMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Req
 				}
 				migration.Status.CutoverCompleted = true
 				logger.Info("Traffic cutover and connection drain succeeded!")
+
+				// Report drain progress from cutover client
+				if activeConns, drainPct, err := cutClient.GetDrainProgress(ctx, cutSpec.DirectorEndpoint, cutSpec.RouteID); err == nil {
+					migration.Status.ActiveConnections = activeConns
+					migration.Status.DrainProgressPercent = drainPct
+				}
 			}
+		}
+
+		// Move to verification phase instead of completing immediately
+		migration.Status.Phase = v1alpha1.PhaseVerifying
+		r.setCondition(&migration, "Verifying", metav1.ConditionTrue, "PostCutoverVerification", "Running post-cutover verification checks")
+		return ctrl.Result{Requeue: true}, r.Status().Update(ctx, &migration)
+
+	case v1alpha1.PhaseVerifying:
+		logger.Info("Running post-cutover verification checks")
+		verificationPassed := true
+
+		// Run post-cutover verification hooks if configured
+		if r.HookExecutor != nil && len(migration.Spec.PostQuiesceHooks) > 0 {
+			// Use the first post-quiesce hook as a verification hook if it's a connection test
+			for _, hook := range migration.Spec.PostQuiesceHooks {
+				if hook.Type == v1alpha1.HookTypeHTTP || hook.Type == v1alpha1.HookTypePodExec {
+					if err := r.HookExecutor.ExecutePostQuiesce(ctx, &migration); err != nil {
+						logger.Error(err, "Post-cutover verification hook failed", "hook", hook.Name)
+						verificationPassed = false
+						break
+					}
+				}
+			}
+		}
+
+		// Check target workload health via cutover client
+		if migration.Spec.TrafficCutover != nil && migration.Spec.TrafficCutover.Enabled {
+			cutSpec := migration.Spec.TrafficCutover
+			cutClient, err := r.getCutoverClient(cutSpec)
+			if err == nil && cutClient != nil {
+				healthy, err := cutClient.CheckTargetHealth(ctx, cutSpec.DirectorEndpoint, cutSpec.TargetEndpoint)
+				if err != nil {
+					logger.Error(err, "Target health check failed")
+					verificationPassed = false
+				} else if !healthy {
+					logger.Info("Target health check returned unhealthy")
+					verificationPassed = false
+				}
+			}
+		}
+
+		if !verificationPassed {
+			return r.triggerRollback(ctx, &migration, "Post-cutover verification failed")
 		}
 
 		now := metav1.Now()
@@ -423,11 +484,37 @@ func (r *PortageMigrationReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		if r.HookExecutor != nil {
 			_ = r.HookExecutor.ExecutePostQuiesce(ctx, &migration)
 		}
+		// Rollback the traffic cutover: flip Ghostwire back to source
+		if migration.Spec.TrafficCutover != nil && migration.Spec.TrafficCutover.Enabled {
+			cutSpec := migration.Spec.TrafficCutover
+			cutClient, err := r.getCutoverClient(cutSpec)
+			if err == nil && cutClient != nil {
+				// Rollback: re-point traffic to source endpoint
+				// ExecuteRollback flips the Ghostwire route back to source and drains target connections
+				timeoutSec := cutSpec.DrainTimeoutSeconds
+				if timeoutSec <= 0 {
+					timeoutSec = 30
+				}
+				_ = cutClient.ExecuteRollback(ctx, cutSpec.DirectorEndpoint, cutSpec.RouteID, timeoutSec)
+				logger.Info("Traffic cutover rolled back to source", "routeID", cutSpec.RouteID)
+			}
+		}
+		// Scale down target StatefulSet to stop target workload
+		if migration.Status.TargetWorkloadReady {
+			_ = r.scaleDownTargetWorkload(ctx, &migration)
+		}
+		// Clean up target PVCs (optional — retains for forensics by default)
+					if len(migration.Spec.VolumeMigration.PersistentVolumeClaimNames) > 0 && !migration.Spec.VolumeMigration.RetainOnSource {
+			_ = r.cleanupTargetResources(ctx, &migration)
+		}
 		migration.Status.Phase = v1alpha1.PhaseFailed
 		r.setCondition(&migration, "Failed", metav1.ConditionTrue, "RollbackExecuted", migration.Status.ErrorMessage)
 		return ctrl.Result{}, r.Status().Update(ctx, &migration)
 
-	case v1alpha1.PhaseCompleted, v1alpha1.PhaseFailed:
+	case v1alpha1.PhaseCompleted:
+		return ctrl.Result{}, nil
+
+	case v1alpha1.PhaseFailed:
 		return ctrl.Result{}, nil
 	}
 
@@ -439,7 +526,7 @@ func (r *PortageMigrationReconciler) failMigration(ctx context.Context, m *v1alp
 	m.Status.ErrorMessage = msg
 	r.setCondition(m, "Failed", metav1.ConditionTrue, "MigrationFailed", msg)
 	_ = r.Status().Update(ctx, m)
-	return ctrl.Result{}, fmt.Errorf(msg)
+	return ctrl.Result{}, fmt.Errorf("%s", msg)
 }
 
 func (r *PortageMigrationReconciler) triggerRollback(ctx context.Context, m *v1alpha1.PortageMigration, msg string) (ctrl.Result, error) {
@@ -468,6 +555,92 @@ func (r *PortageMigrationReconciler) setCondition(m *v1alpha1.PortageMigration, 
 		LastTransitionTime: metav1.Now(),
 	})
 }
+
+// resolveSourceEndpoint derives the source database endpoint from the source workload.
+// For a StatefulSet, it returns the headless service DNS name.
+func (r *PortageMigrationReconciler) resolveSourceEndpoint(ctx context.Context, m *v1alpha1.PortageMigration) string {
+	// Default: construct from workload name and namespace
+	// For StatefulSet, the stable network identity is: <statefulset-name>-0.<headless-service>.<namespace>.svc.cluster.local
+	// We fall back to: <workload-name>.<source-namespace>.svc.cluster.local
+	serviceName := m.Spec.SourceWorkload.Name
+	if serviceName == "" {
+		return ""
+	}
+	return fmt.Sprintf("%s.%s.svc.cluster.local:5432", serviceName, m.Spec.SourceNamespace)
+}
+
+// scaleDownTargetWorkload scales the target StatefulSet to 0 replicas.
+func (r *PortageMigrationReconciler) scaleDownTargetWorkload(ctx context.Context, m *v1alpha1.PortageMigration) error {
+	logger := log.FromContext(ctx)
+	// Only handle StatefulSet workloads for now
+	if m.Spec.SourceWorkload.Kind != "StatefulSet" {
+		return nil
+	}
+
+	targetNs := m.Spec.TargetNamespace
+	if targetNs == "" {
+		targetNs = m.Spec.SourceNamespace
+	}
+
+	ss := &appsv1.StatefulSet{}
+	err := r.Get(ctx, client.ObjectKey{Namespace: targetNs, Name: m.Spec.SourceWorkload.Name}, ss)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			return nil // Already gone
+		}
+		return fmt.Errorf("failed to get target StatefulSet: %w", err)
+	}
+
+	// Scale to 0
+	ss.Spec.Replicas = func() *int32 { v := int32(0); return &v }()
+	if err := r.Update(ctx, ss); err != nil {
+		return fmt.Errorf("failed to scale down target StatefulSet: %w", err)
+	}
+	logger.Info("Scaled down target StatefulSet to 0 replicas", "name", ss.Name, "namespace", ss.Namespace)
+	return nil
+}
+
+// cleanupTargetResources removes target PVCs and other resources created during migration.
+func (r *PortageMigrationReconciler) cleanupTargetResources(ctx context.Context, m *v1alpha1.PortageMigration) error {
+	logger := log.FromContext(ctx)
+	targetNs := m.Spec.TargetNamespace
+	if targetNs == "" {
+		targetNs = m.Spec.SourceNamespace
+	}
+
+	// Delete target PVCs
+	for _, pvcName := range m.Spec.VolumeMigration.PersistentVolumeClaimNames {
+		pvc := &corev1.PersistentVolumeClaim{}
+		err := r.Get(ctx, client.ObjectKey{Namespace: targetNs, Name: pvcName}, pvc)
+		if err != nil {
+			if errors.IsNotFound(err) {
+				continue
+			}
+			logger.Error(err, "Failed to get target PVC for cleanup", "pvc", pvcName)
+			continue
+		}
+		if err := r.Delete(ctx, pvc); err != nil && !errors.IsNotFound(err) {
+			logger.Error(err, "Failed to delete target PVC", "pvc", pvcName)
+		}
+	}
+
+	// Delete target StatefulSet
+	if m.Spec.SourceWorkload.Kind == "StatefulSet" {
+		ss := &appsv1.StatefulSet{}
+		err := r.Get(ctx, client.ObjectKey{Namespace: targetNs, Name: m.Spec.SourceWorkload.Name}, ss)
+		if err != nil && !errors.IsNotFound(err) {
+			logger.Error(err, "Failed to get target StatefulSet for cleanup")
+		} else if err == nil {
+			if delErr := r.Delete(ctx, ss); delErr != nil && !errors.IsNotFound(delErr) {
+				logger.Error(delErr, "Failed to delete target StatefulSet")
+			}
+		}
+	}
+
+	return nil
+}
+
+// +kubebuilder:rbac:groups=apps,resources=statefulsets,verbs=get;update;delete
 
 func (r *PortageMigrationReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).

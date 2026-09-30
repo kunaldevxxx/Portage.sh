@@ -51,6 +51,15 @@ func (c *CommunityReplicationDriver) GetLag(ctx context.Context, endpoint, strea
 	return 0, nil
 }
 
+func (c *CommunityReplicationDriver) GetCurrentLSN(ctx context.Context, endpoint, streamID string) (uint64, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if !c.streams[streamID] {
+		return 0, fmt.Errorf("stream %q not found", streamID)
+	}
+	return 0, nil
+}
+
 // CommunityCutoverDriver provides a standard Kubernetes Service endpoint or DNS swap.
 // Note: Community cutover drops existing in-flight TCP connections (standard TCP RST),
 // whereas Enterprise Ghostwire provides zero-reset kernel splicing and connection draining.
@@ -76,6 +85,18 @@ func (c *CommunityCutoverDriver) ExecuteCutover(ctx context.Context, directorEnd
 	return nil
 }
 
+func (c *CommunityCutoverDriver) ExecuteRollback(ctx context.Context, directorEndpoint, routeID string, drainTimeoutSec int32) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	// Remove the route mapping to effectively rollback
+	delete(c.cutover, routeID)
+	return nil
+}
+
 func (c *CommunityCutoverDriver) CheckTargetHealth(ctx context.Context, directorEndpoint, targetEndpoint string) (bool, error) {
 	return true, nil
+}
+
+func (c *CommunityCutoverDriver) GetDrainProgress(ctx context.Context, directorEndpoint, routeID string) (int64, int64, error) {
+	return 0, 100, nil
 }

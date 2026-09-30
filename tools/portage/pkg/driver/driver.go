@@ -15,6 +15,8 @@ type DataReplicationDriver interface {
 	VerifyState(ctx context.Context, endpoint, streamID string) (bool, string, error)
 	// GetLag returns the current replication lag in seconds
 	GetLag(ctx context.Context, endpoint, streamID string) (int64, error)
+	// GetCurrentLSN returns the last replicated WAL/sequence LSN
+	GetCurrentLSN(ctx context.Context, endpoint, streamID string) (uint64, error)
 }
 
 // TrafficCutoverDriver abstracts traffic-plane routing and connection draining proxies.
@@ -24,6 +26,10 @@ type TrafficCutoverDriver interface {
 	Name() string
 	// ExecuteCutover performs the traffic cutover to the target endpoint and drains active connections
 	ExecuteCutover(ctx context.Context, directorEndpoint, routeID, targetEndpoint string, drainTimeoutSec int32) error
+	// ExecuteRollback performs the traffic rollback to the source endpoint and drains target connections
+	ExecuteRollback(ctx context.Context, directorEndpoint, routeID string, drainTimeoutSec int32) error
 	// CheckTargetHealth validates backend connectivity prior to swapping traffic
 	CheckTargetHealth(ctx context.Context, directorEndpoint, targetEndpoint string) (bool, error)
+	// GetDrainProgress returns active connection count and drain progress percentage
+	GetDrainProgress(ctx context.Context, directorEndpoint, routeID string) (int64, int64, error)
 }

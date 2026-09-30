@@ -21,6 +21,7 @@ const (
 	PhaseCompleted       Phase = "Completed"
 	PhaseFailed          Phase = "Failed"
 	PhaseRollback        Phase = "Rollback"
+	PhaseVerifying       Phase = "Verifying"
 )
 
 // HookType defines how a quiescence hook is executed.
@@ -52,6 +53,17 @@ type HTTPHook struct {
 	URL     string            `json:"url"`
 	Method  string            `json:"method"`
 	Headers map[string]string `json:"headers,omitempty"`
+}
+
+// CommandString returns the effective command string for allowlist checking.
+func (h QuiescenceHook) CommandString() string {
+	if h.PodExec != nil && len(h.PodExec.Command) > 0 {
+		return h.PodExec.Command[0]
+	}
+	if h.HTTP != nil {
+		return h.HTTP.Method + " " + h.HTTP.URL
+	}
+	return ""
 }
 
 // APITranslationRule defines AST transformations for deprecated Kubernetes APIs.
@@ -125,6 +137,13 @@ type PortageMigrationStatus struct {
 	StartTime             *metav1.Time       `json:"startTime,omitempty"`
 	CompletionTime        *metav1.Time       `json:"completionTime,omitempty"`
 	ErrorMessage          string             `json:"errorMessage,omitempty"`
+
+	// Fine-grained progress fields
+	SnapshotsReadyCount int64  `json:"snapshotsReadyCount,omitempty"`
+	TotalSnapshots      int64  `json:"totalSnapshots,omitempty"`
+	CurrentWALLSN       uint64 `json:"currentWALLSN,omitempty"`
+	ActiveConnections   int64  `json:"activeConnections,omitempty"`
+	DrainProgressPercent int64 `json:"drainProgressPercent,omitempty"`
 }
 
 // +kubebuilder:object:root=true
