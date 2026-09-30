@@ -141,13 +141,13 @@ func buildSummary(migration *v1alpha1.PortageMigration, result *DryRunResult) st
 	}
 
 	if len(result.Errors) > 0 {
-		parts = append(parts, fmt.Sprintf("❌ %d error(s)", len(result.Errors)))
+		parts = append(parts, fmt.Sprintf("[ERROR] %d error(s)", len(result.Errors)))
 	}
 	if len(result.Warnings) > 0 {
-		parts = append(parts, fmt.Sprintf("⚠️  %d warning(s)", len(result.Warnings)))
+		parts = append(parts, fmt.Sprintf("[WARN] %d warning(s)", len(result.Warnings)))
 	}
 	if result.Valid && len(result.Errors) == 0 {
-		parts = append(parts, "✅ Migration validation passed — ready to execute")
+		parts = append(parts, "[PASS] Migration validation passed — ready to execute")
 	}
 
 	return strings.Join(parts, " | ")
@@ -189,9 +189,9 @@ func FormatResult(result *DryRunResult) string {
 	var sb strings.Builder
 
 	if result.Valid {
-		sb.WriteString("✅ VALID\n")
+		sb.WriteString("[VALID] Pre-flight validation succeeded\n")
 	} else {
-		sb.WriteString("❌ INVALID\n")
+		sb.WriteString("[INVALID] Pre-flight validation failed\n")
 	}
 
 	for _, e := range result.Errors {

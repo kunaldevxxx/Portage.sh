@@ -3,16 +3,78 @@ package dashboard
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"sync"
+	"time"
 )
+
+// EventStore holds real-time migration status updates thread-safely.
+type EventStore struct {
+	mu     sync.RWMutex
+	events map[string]*MigrationStatusEvent
+}
+
+// NewEventStore initializes an empty EventStore.
+func NewEventStore() *EventStore {
+	return &EventStore{
+		events: make(map[string]*MigrationStatusEvent),
+	}
+}
+
+// Record saves or updates a migration status event in the store.
+func (s *EventStore) Record(event *MigrationStatusEvent) {
+	if event == nil {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if event.StartTime == "" {
+		event.StartTime = time.Now().UTC().Format(time.RFC3339)
+	}
+	key := fmt.Sprintf("%s/%s", event.Namespace, event.Name)
+	s.events[key] = event
+}
+
+// GetAll returns a snapshot list of all migration status events.
+func (s *EventStore) GetAll() []*MigrationStatusEvent {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	list := make([]*MigrationStatusEvent, 0, len(s.events))
+	for _, e := range s.events {
+		list = append(list, e)
+	}
+	return list
+}
+
+// GlobalStore is the default singleton event store for migrations.
+var GlobalStore = NewEventStore()
 
 // Handler returns an HTTP handler that serves the migration dashboard.
 func Handler(migrationStatus chan *MigrationStatusEvent) http.Handler {
+	store := GlobalStore
+	if migrationStatus != nil {
+		go func() {
+			for event := range migrationStatus {
+				store.Record(event)
+			}
+		}()
+	}
+
 	mux := http.NewServeMux()
-	mux.HandleFunc("/api/status", statusHandler(migrationStatus))
-	mux.HandleFunc("/api/events", eventsHandler(migrationStatus))
+	mux.HandleFunc("/api/status", statusHandler(store))
+	mux.HandleFunc("/api/events", eventsHandler(store))
 	mux.HandleFunc("/", indexHandler)
 	return mux
+}
+
+// Serve launches the dashboard HTTP server on the given address.
+func Serve(addr string, migrationStatus chan *MigrationStatusEvent) error {
+	server := &http.Server{
+		Addr:    addr,
+		Handler: Handler(migrationStatus),
+	}
+	return server.ListenAndServe()
 }
 
 // MigrationStatusEvent represents a status update for a migration.
@@ -29,26 +91,24 @@ type MigrationStatusEvent struct {
 }
 
 // statusHandler returns the current status of all migrations as JSON.
-func statusHandler(statusChan chan *MigrationStatusEvent) http.HandlerFunc {
+func statusHandler(store *EventStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		// In production, this would query the Kubernetes API
-		// For now, return a placeholder
-		events := make([]*MigrationStatusEvent, 0)
+		events := store.GetAll()
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"migrations": events,
-			"count":      0,
+			"count":      len(events),
 		})
 	}
 }
 
 // eventsHandler streams migration events as JSON.
-func eventsHandler(statusChan chan *MigrationStatusEvent) http.HandlerFunc {
+func eventsHandler(store *EventStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		// In production, this would use Server-Sent Events or WebSocket
+		events := store.GetAll()
 		json.NewEncoder(w).Encode(map[string]interface{}{
-			"events": make([]*MigrationStatusEvent, 0),
+			"events": events,
 		})
 	}
 }

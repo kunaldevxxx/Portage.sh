@@ -10,6 +10,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"time"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/client-go/kubernetes"
@@ -337,5 +338,5 @@ func createVolumeSnapshotInTarget(ctx context.Context, spec SnapshotMigratorSpec
 }
 
 func mustGetUnixNow() int64 {
-	return 0 // placeholder — real implementation would use time.Now().Unix()
+	return time.Now().Unix()
 }
