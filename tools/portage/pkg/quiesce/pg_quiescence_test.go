@@ -8,6 +8,17 @@ import (
 	v1alpha1 "github.com/aegis-migrate/portage/api/v1alpha1"
 )
 
+// MockHookExecutor implements HookExecutor for testing.
+type MockHookExecutor struct{}
+
+func (m *MockHookExecutor) ExecutePreQuiesce(ctx context.Context, migration *v1alpha1.PortageMigration) error {
+	return nil
+}
+
+func (m *MockHookExecutor) ExecutePostQuiesce(ctx context.Context, migration *v1alpha1.PortageMigration) error {
+	return nil
+}
+
 func TestHookAllowlist_PostgreSQL(t *testing.T) {
 	allowlist := DefaultHookAllowlist()
 
@@ -115,17 +126,6 @@ func TestHookAllowlist_NoAllowlist(t *testing.T) {
 	if !allowlist.IsAllowed("unknown_db", "any command") {
 		t.Error("expected all commands to be allowed when no allowlist defined")
 	}
-}
-
-// MockHookExecutor implements HookExecutor for testing.
-type MockHookExecutor struct{}
-
-func (m *MockHookExecutor) ExecutePreQuiesce(ctx context.Context, migration *v1alpha1.PortageMigration) error {
-	return nil
-}
-
-func (m *MockHookExecutor) ExecutePostQuiesce(ctx context.Context, migration *v1alpha1.PortageMigration) error {
-	return nil
 }
 
 func TestHookExecutorWithAllowlist_SkipNonAllowlisted(t *testing.T) {
