@@ -23,12 +23,14 @@ func DefaultHookAllowlist() *HookAllowlist {
 		PostgreSQL: []string{
 			"psql", "pg_dump", "pg_restore", "pg_basebackup",
 			"pg_isready", "pg_config", "postgres",
+			"checkpoint", "backup_start", "backup_stop", "wal_backup",
 		},
 		MySQL: []string{
 			"mysql", "mysqldump", "mysqladmin", "mysqlcheck",
 		},
 		MongoDB: []string{
 			"mongo", "mongodump", "mongorestore", "mongosh",
+			"fsync", "lock", "unlock",
 		},
 		Custom: make(map[string][]string),
 	}
@@ -178,9 +180,6 @@ func (h *HookExecutorWithAllowlist) ExecutePreQuiesce(ctx context.Context, migra
 			return fmt.Errorf("hook %q command not in allowlist for %s: %s", hook.Name, h.dbType, command)
 		}
 
-		entry.Status = "running"
-		h.auditLog.Record(entry)
-
 		err := h.wrapped.ExecutePreQuiesce(ctx, migration)
 		entry.EndTime = time.Now()
 		if err != nil {
@@ -221,9 +220,6 @@ func (h *HookExecutorWithAllowlist) ExecutePostQuiesce(ctx context.Context, migr
 			h.auditLog.Record(entry)
 			return fmt.Errorf("hook %q command not in allowlist for %s: %s", hook.Name, h.dbType, command)
 		}
-
-		entry.Status = "running"
-		h.auditLog.Record(entry)
 
 		err := h.wrapped.ExecutePostQuiesce(ctx, migration)
 		entry.EndTime = time.Now()
