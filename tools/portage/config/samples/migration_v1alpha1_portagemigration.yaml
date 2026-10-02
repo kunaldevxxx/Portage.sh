@@ -1,0 +1,54 @@
+apiVersion: migration.portage.sh/v1alpha1
+kind: PortageMigration
+metadata:
+  name: postgres-ha-migration
+  namespace: database-prod
+spec:
+  sourceWorkload:
+    kind: StatefulSet
+    name: postgres-cluster
+  sourceNamespace: database-prod
+  targetNamespace: database-modern-prod
+  preQuiesceHooks:
+    - name: postgres-checkpoint-and-lock
+      type: PodExec
+      timeoutSeconds: 30
+      maxRetries: 3
+      podExec:
+        selector:
+          matchLabels:
+            app.kubernetes.io/name: postgres
+            role: primary
+        command:
+          - psql
+          - -U
+          - postgres
+          - -c
+          - "CHECKPOINT; SELECT pg_backup_start('portage_migration', true);"
+  postQuiesceHooks:
+    - name: postgres-unlock
+      type: PodExec
+      timeoutSeconds: 30
+      maxRetries: 3
+      podExec:
+        selector:
+          matchLabels:
+            app.kubernetes.io/name: postgres
+            role: primary
+        command:
+          - psql
+          - -U
+          - postgres
+          - -c
+          - "SELECT pg_backup_stop();"
+  volumeMigration:
+    volumeSnapshotClassName: csi-aws-vsc
+    targetStorageClassName: gp3-encrypted
+    persistentVolumeClaimNames:
+      - data-postgres-cluster-0
+      - data-postgres-cluster-1
+    retainOnSource: true
+  translationRules:
+    - sourceAPIVersion: "extensions/v1beta1"
+      targetAPIVersion: "networking.k8s.io/v1"
+      kind: "Ingress"

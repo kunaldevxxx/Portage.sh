@@ -1,0 +1,42 @@
+syntax = "proto3";
+
+package migration.v1;
+
+option go_package = "github.com/aegis-migrate/shared/proto/migration/v1;migrationv1";
+
+service TrafficCutoverController {
+  rpc InitiateCutover(CutoverRequest) returns (CutoverResponse);
+  rpc DrainConnections(DrainRequest) returns (DrainResponse);
+  rpc HealthCheck(HealthCheckRequest) returns (HealthCheckResponse);
+}
+
+message CutoverRequest {
+  string route_id = 1;
+  string target_cluster_endpoint = 2;
+  int64 drain_timeout_ms = 3;
+}
+
+message CutoverResponse {
+  bool cutover_successful = 1;
+  int64 drained_connections = 2;
+  int64 elapsed_time_us = 3;
+}
+
+message DrainRequest {
+  string route_id = 1;
+  int64 grace_period_ms = 2;
+}
+
+message DrainResponse {
+  int64 active_connections_remaining = 1;
+  bool drain_complete = 2;
+}
+
+message HealthCheckRequest {
+  string target_cluster_endpoint = 1;
+}
+
+message HealthCheckResponse {
+  bool is_healthy = 1;
+  int64 latency_us = 2;
+}

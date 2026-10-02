@@ -1,0 +1,77 @@
+apiVersion: migration.portage.sh/v1alpha1
+kind: PortageMigration
+metadata:
+  name: postgres-ha-zero-downtime
+  namespace: source-legacy
+spec:
+  sourceWorkload:
+    kind: StatefulSet
+    name: postgres-primary
+  sourceNamespace: source-legacy
+  targetNamespace: target-modern
+
+  # Pre-quiescence locks: Flushes write buffers & initiates backup checkpoint
+  preQuiesceHooks:
+    - name: postgres-checkpoint-and-lock
+      type: PodExec
+      timeoutSeconds: 30
+      maxRetries: 3
+      podExec:
+        selector:
+          matchLabels:
+            app.kubernetes.io/name: postgres
+        command:
+          - psql
+          - -U
+          - postgres
+          - -c
+          - "CHECKPOINT; SELECT pg_backup_start('portage_quiesce', true);"
+
+  # Post-quiescence hooks: Immediately unlocks tables once snapshot is requested
+  postQuiesceHooks:
+    - name: postgres-unlock
+      type: PodExec
+      timeoutSeconds: 30
+      maxRetries: 3
+      podExec:
+        selector:
+          matchLabels:
+            app.kubernetes.io/name: postgres
+        command:
+          - psql
+          - -U
+          - postgres
+          - -c
+          - "SELECT pg_backup_stop();"
+
+  # Data Plane: Continuous WAL streaming & Cryptographic Merkle Verification (Enterprise Synapse-CDC)
+  cdcReplication:
+    driver: enterprise-synapse
+    enabled: true
+    endpoint: "http://synapse-cdc.migration.svc:8080"
+    streamID: "postgres-primary-wal"
+    requireMerkleVerification: true
+    maxAllowedLagSeconds: 2
+
+  # Traffic Plane: Zero-loss traffic cutover & connection draining via Ghostwire (Enterprise Ghostwire)
+  trafficCutover:
+    driver: enterprise-ghostwire
+    enabled: true
+    directorEndpoint: "http://ghostwire.migration.svc:8080"
+    routeID: "postgres-db-route"
+    targetEndpoint: "postgres-svc.target-modern.svc:5432"
+    drainTimeoutSeconds: 15
+
+  # Storage Plane: CSI Snapshotting & Modern StorageClass remapping
+  volumeMigration:
+    volumeSnapshotClassName: csi-aws-vsc
+    targetStorageClassName: gp3-nvme-encrypted
+    persistentVolumeClaimNames:
+      - data-postgres-0
+    retainOnSource: true
+
+  # API Translation: Rules for modernizing deprecated Kubernetes APIs
+  translationRules:
+    - sourceAPIVersion: "extensions/v1beta1"
+      targetAPIVersion: "networking.k8s.io/v1"
+      kind: "Ingress"

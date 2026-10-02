@@ -1,0 +1,65 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "portage-operator.fullname" . }}-role
+  labels:
+    app.kubernetes.io/name: {{ include "portage-operator.name" . }}
+    helm.sh/chart: {{ include "portage-operator.chart" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+rules:
+  # Core resources
+  - apiGroups: [""]
+    resources: ["namespaces", "pods", "services", "secrets", "configmaps"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims", "persistentvolumes"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
+  - apiGroups: [""]
+    resources: ["pods/exec"]
+    verbs: ["create"]
+  # Workload APIs
+  - apiGroups: ["apps"]
+    resources: ["statefulsets", "deployments"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
+  # Networking APIs
+  - apiGroups: ["networking.k8s.io", "extensions"]
+    resources: ["ingresses"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
+  # CSI VolumeSnapshot APIs
+  - apiGroups: ["snapshot.storage.k8s.io"]
+    resources: ["volumesnapshots", "volumesnapshotclasses", "volumesnapshotcontents"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
+  # Portage Custom Resources
+  - apiGroups: ["migration.portage.sh"]
+    resources: ["portagemigrations"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["migration.portage.sh"]
+    resources: ["portagemigrations/status"]
+    verbs: ["get", "update", "patch"]
+  # Leader Election & Coordination
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  # Events
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "portage-operator.fullname" . }}-rolebinding
+  labels:
+    app.kubernetes.io/name: {{ include "portage-operator.name" . }}
+    helm.sh/chart: {{ include "portage-operator.chart" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "portage-operator.fullname" . }}-role
+subjects:
+  - kind: ServiceAccount
+    name: {{ .Values.serviceAccount.name | default (include "portage-operator.fullname" .) }}
+    namespace: {{ .Release.Namespace }}

@@ -1,0 +1,81 @@
+# Default values for portage-operator.
+# This is a YAML-formatted file.
+
+replicaCount: 1
+
+image:
+  repository: ghcr.io/kunaldevxxx/portage-operator
+  pullPolicy: IfNotPresent
+  # Overrides the image tag whose default is the chart appVersion.
+  tag: ""
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: true
+  # Annotations to add to the service account
+  annotations: {}
+  # The name of the service account to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name: ""
+
+crds:
+  # Install CRDs with Helm
+  install: true
+
+leaderElection:
+  enabled: true
+  leaseDuration: 15s
+  renewDeadline: 10s
+  retryPeriod: 2s
+
+metrics:
+  enabled: true
+  port: 8080
+
+healthProbe:
+  port: 8081
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  fsGroup: 65532
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+# Open-Core Pluggable Driver Defaults
+drivers:
+  defaultReplicationDriver: "community-cdc"
+  defaultCutoverDriver: "community-cutover"
+  enterpriseSynapseEndpoint: ""
+  enterpriseGhostwireEndpoint: ""
+
+# Sovereign / Air-Gapped Deployment
+airgap:
+  enabled: false
+  customRegistry: ""

@@ -1,0 +1,146 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: portage-system
+  labels:
+    app.kubernetes.io/name: portage
+    app.kubernetes.io/part-of: portage-platform
+    pod-security.kubernetes.io/enforce: restricted
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: portage-operator
+  namespace: portage-system
+  labels:
+    app.kubernetes.io/name: portage
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: portage-operator-role
+  labels:
+    app.kubernetes.io/name: portage
+rules:
+  # Core resources
+  - apiGroups: [""]
+    resources: ["namespaces", "pods", "services", "secrets", "configmaps"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims", "persistentvolumes"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
+  - apiGroups: [""]
+    resources: ["pods/exec"]
+    verbs: ["create"]
+  # Workload APIs
+  - apiGroups: ["apps"]
+    resources: ["statefulsets", "deployments"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
+  # Networking APIs
+  - apiGroups: ["networking.k8s.io", "extensions"]
+    resources: ["ingresses"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
+  # CSI VolumeSnapshot APIs
+  - apiGroups: ["snapshot.storage.k8s.io"]
+    resources: ["volumesnapshots", "volumesnapshotclasses", "volumesnapshotcontents"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
+  # Portage Custom Resources
+  - apiGroups: ["migration.portage.sh"]
+    resources: ["portagemigrations"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["migration.portage.sh"]
+    resources: ["portagemigrations/status"]
+    verbs: ["get", "update", "patch"]
+  # Leader Election & Coordination
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  # Events
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: portage-operator-rolebinding
+  labels:
+    app.kubernetes.io/name: portage
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: portage-operator-role
+subjects:
+  - kind: ServiceAccount
+    name: portage-operator
+    namespace: portage-system
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: portage-operator
+  namespace: portage-system
+  labels:
+    app.kubernetes.io/name: portage-operator
+    app.kubernetes.io/part-of: portage-platform
+    app.kubernetes.io/component: controller
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: portage-operator
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: portage-operator
+    spec:
+      serviceAccountName: portage-operator
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: manager
+          image: ghcr.io/kunaldevxxx/portage-operator:v1.0.0
+          imagePullPolicy: IfNotPresent
+          command:
+            - /portage-operator
+          args:
+            - --leader-elect=true
+            - --metrics-bind-address=:8080
+            - --health-probe-bind-address=:8081
+          ports:
+            - name: metrics
+              containerPort: 8080
+              protocol: TCP
+            - name: health
+              containerPort: 8081
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8081
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8081
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
