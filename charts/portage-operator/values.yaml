@@ -9,9 +9,29 @@ image:
   # Overrides the image tag whose default is the chart appVersion.
   tag: ""
 
+# Image pull secrets for private registries (e.g., ghcr.io with enterprise backend)
+# Example:
+# imagePullSecrets:
+#   - name: ghcr-enterprise-credentials
 imagePullSecrets: []
 nameOverride: ""
 fullnameOverride: ""
+
+# Enterprise Backend Configuration (Private GHCR)
+# Only required if using enterprise drivers (synapse-cdc, ghostwire)
+enterpriseBackend:
+  enabled: false
+  # Private GHCR registry for enterprise components
+  registry: ghcr.io/kunaldevxxx
+  synapseCdc:
+    repository: portage-enterprise-synapse-cdc
+    tag: "1.0.0"
+  ghostwire:
+    repository: portage-enterprise-ghostwire
+    tag: "1.0.0"
+  # Credentials for pulling from private GHCR
+  # Create with: kubectl create secret docker-registry ghcr-enterprise-credentials
+  imagePullSecretName: ghcr-enterprise-credentials
 
 serviceAccount:
   # Specifies whether a service account should be created
