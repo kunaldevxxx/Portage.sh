@@ -1,0 +1,71 @@
+name: "Security Audits"
+
+on:
+  schedule:
+    # Run daily at 02:00 UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+
+jobs:
+  trivy-scan:
+    name: "Trivy Vulnerability & Misconfiguration Scan"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    steps:
+      - name: "Checkout Code"
+        uses: actions/checkout@v4
+
+      - name: "Run Trivy Vulnerability Scanner"
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: "fs"
+          ignore-unfixed: true
+          format: "sarif"
+          output: "trivy-results.sarif"
+          severity: "CRITICAL,HIGH"
+
+      - name: "Generate Trivy Summary for Actions"
+        uses: aquasecurity/trivy-action@master
+        if: always()
+        with:
+          scan-type: "fs"
+          ignore-unfixed: true
+          format: "table"
+          output: "trivy-summary.txt"
+          severity: "CRITICAL,HIGH"
+
+      - name: "Publish Trivy Summary to Job Summary"
+        if: always()
+        run: |
+          if [ -f trivy-summary.txt ]; then
+            echo "### 🛡️ Trivy Security Scan Summary" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            cat trivy-summary.txt >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: "Archive Trivy Scan Results"
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: trivy-security-report
+          path: |
+            trivy-results.sarif
+            trivy-summary.txt
+          if-no-files-found: ignore
+
+      - name: "Upload Trivy SARIF to GitHub Security"
+        uses: github/codeql-action/upload-sarif@v4
+        if: always()
+        continue-on-error: true
+        with:
+          sarif_file: "trivy-results.sarif"
+          category: "trivy"

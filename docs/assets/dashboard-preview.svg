@@ -1,0 +1,177 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 680" width="1200" height="680" style="background:#0d1117; font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif;">
+  <defs>
+    <filter id="card-shadow" x="-5%" y="-5%" width="110%" height="110%">
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#000000" flood-opacity="0.4"/>
+    </filter>
+    <linearGradient id="blue-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1f6feb"/>
+      <stop offset="100%" stop-color="#388bfd"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Outer Window Frame -->
+  <rect x="20" y="20" width="1160" height="640" rx="12" fill="#161b22" stroke="#30363d" stroke-width="1.5" filter="url(#card-shadow)"/>
+
+  <!-- Window Header / Controls -->
+  <path d="M 20 32 C 20 25.37 25.37 20 32 20 L 1168 20 C 1174.63 20 1180 25.37 1180 32 L 1180 68 L 20 68 Z" fill="#1c2128" stroke="#30363d" stroke-width="1"/>
+  <circle cx="44" cy="44" r="6" fill="#f85149"/>
+  <circle cx="64" cy="44" r="6" fill="#d29922"/>
+  <circle cx="84" cy="44" r="6" fill="#3fb950"/>
+  <text x="600" y="48" fill="#8b949e" font-size="12" font-weight="600" text-anchor="middle" letter-spacing="0.5">Portage Live Observability Dashboard &bull; http://localhost:8080</text>
+
+  <!-- App Header -->
+  <g transform="translate(50, 90)">
+    <rect x="0" y="0" width="38" height="38" rx="8" fill="url(#blue-grad)"/>
+    <text x="19" y="26" fill="#ffffff" font-size="20" font-weight="900" text-anchor="middle">P</text>
+
+    <text x="50" y="20" fill="#e6edf3" font-size="18" font-weight="700">Portage Migration Console</text>
+    <text x="50" y="36" fill="#8b949e" font-size="12">Zero-Downtime Stateful Workload Orchestration &bull; Merkle Bit-Level Verification</text>
+
+    <!-- Pulse Status Badge -->
+    <rect x="305" y="6" width="170" height="22" rx="4" fill="#042616" stroke="#238636" stroke-width="1"/>
+    <circle cx="318" cy="17" r="4" fill="#3fb950"/>
+    <text x="330" y="21" fill="#3fb950" font-size="10.5" font-weight="700" letter-spacing="0.5">[LIVE AGENT API]</text>
+
+    <!-- Header Action Buttons -->
+    <rect x="730" y="4" width="95" height="28" rx="6" fill="#21262d" stroke="#30363d" stroke-width="1"/>
+    <text x="777" y="22" fill="#c9d1d9" font-size="11" font-weight="600" text-anchor="middle">[RESET DEMO]</text>
+
+    <rect x="835" y="4" width="135" height="28" rx="6" fill="#0d2d6c" stroke="#1f6feb" stroke-width="1"/>
+    <text x="902" y="22" fill="#58a6ff" font-size="11" font-weight="600" text-anchor="middle">[SIMULATE STREAM]</text>
+
+    <rect x="980" y="4" width="120" height="28" rx="6" fill="#238636" stroke="#2ea043" stroke-width="1"/>
+    <text x="1040" y="22" fill="#ffffff" font-size="11" font-weight="700" text-anchor="middle">[CUTOVER ALL]</text>
+  </g>
+
+  <!-- Divider Line -->
+  <line x1="50" y1="145" x2="1150" y2="145" stroke="#30363d" stroke-width="1"/>
+
+  <!-- 4 KPI Metrics Row -->
+  <g transform="translate(50, 160)">
+    <!-- Card 1 -->
+    <rect x="0" y="0" width="260" height="92" rx="8" fill="#1c2128" stroke="#30363d" stroke-width="1"/>
+    <text x="16" y="24" fill="#8b949e" font-size="11" font-weight="600" letter-spacing="0.5">ACTIVE MIGRATIONS</text>
+    <text x="16" y="58" fill="#58a6ff" font-size="28" font-weight="700">2</text>
+    <text x="16" y="78" fill="#8b949e" font-size="11">Dual-streaming CDC replication</text>
+
+    <!-- Card 2 -->
+    <rect x="280" y="0" width="260" height="92" rx="8" fill="#1c2128" stroke="#30363d" stroke-width="1"/>
+    <text x="296" y="24" fill="#8b949e" font-size="11" font-weight="600" letter-spacing="0.5">COMPLETED WORKLOADS</text>
+    <text x="296" y="58" fill="#3fb950" font-size="28" font-weight="700">1</text>
+    <text x="296" y="78" fill="#8b949e" font-size="11">100% Zero-Loss Promoted</text>
+
+    <!-- Card 3 -->
+    <rect x="560" y="0" width="260" height="92" rx="8" fill="#1c2128" stroke="#30363d" stroke-width="1"/>
+    <text x="576" y="24" fill="#8b949e" font-size="11" font-weight="600" letter-spacing="0.5">MERKLE CONSISTENCY</text>
+    <text x="576" y="58" fill="#3fb950" font-size="28" font-weight="700">100%</text>
+    <text x="576" y="78" fill="#8b949e" font-size="11">Bit-exact validation (0 drift)</text>
+
+    <!-- Card 4 -->
+    <rect x="840" y="0" width="260" height="92" rx="8" fill="#1c2128" stroke="#30363d" stroke-width="1"/>
+    <text x="856" y="24" fill="#8b949e" font-size="11" font-weight="600" letter-spacing="0.5">P99 CUTOVER LATENCY</text>
+    <text x="856" y="58" fill="#bc8cff" font-size="28" font-weight="700">38 ms</text>
+    <text x="856" y="78" fill="#8b949e" font-size="11">Ghostwire TCP session drain</text>
+  </g>
+
+  <!-- Table Container -->
+  <g transform="translate(50, 270)">
+    <rect x="0" y="0" width="1100" height="290" rx="8" fill="#1c2128" stroke="#30363d" stroke-width="1"/>
+
+    <!-- Table Header Row -->
+    <path d="M 0 8 C 0 3.58 3.58 0 8 0 L 1092 0 C 1096.42 0 1100 3.58 1100 8 L 1100 40 L 0 40 Z" fill="#21262d" stroke="#30363d" stroke-width="1"/>
+    <text x="24" y="25" fill="#8b949e" font-size="11" font-weight="700" letter-spacing="0.5">MIGRATION TARGET</text>
+    <text x="280" y="25" fill="#8b949e" font-size="11" font-weight="700" letter-spacing="0.5">TOPOLOGY &amp; ENGINE</text>
+    <text x="540" y="25" fill="#8b949e" font-size="11" font-weight="700" letter-spacing="0.5">LIFECYCLE PHASE</text>
+    <text x="690" y="25" fill="#8b949e" font-size="11" font-weight="700" letter-spacing="0.5">REPLICATION LAG</text>
+    <text x="830" y="25" fill="#8b949e" font-size="11" font-weight="700" letter-spacing="0.5">MERKLE STATE</text>
+    <text x="1010" y="25" fill="#8b949e" font-size="11" font-weight="700" letter-spacing="0.5" text-anchor="middle">ACTIONS</text>
+
+    <!-- Row 1: PostgreSQL Completed -->
+    <g transform="translate(0, 40)">
+      <rect x="0" y="0" width="1100" height="75" fill="#161b22" stroke="#30363d" stroke-width="0.5"/>
+      <text x="24" y="32" fill="#e6edf3" font-size="14" font-weight="700">postgres-ha-zero-downtime</text>
+      <text x="24" y="52" fill="#8b949e" font-size="11" font-family="monospace">source-legacy</text>
+
+      <text x="280" y="42" fill="#d0d7de" font-size="12">PostgreSQL 16 &rarr; AWS RDS Aurora</text>
+
+      <!-- Phase Badge -->
+      <rect x="540" y="27" width="105" height="22" rx="4" fill="#042616" stroke="#238636" stroke-width="1"/>
+      <text x="592" y="42" fill="#3fb950" font-size="10.5" font-weight="700" text-anchor="middle">[COMPLETED]</text>
+
+      <!-- Lag -->
+      <circle cx="698" cy="38" r="3.5" fill="#3fb950"/>
+      <text x="708" y="42" fill="#3fb950" font-size="12" font-weight="600" font-family="monospace">0s (REALTIME)</text>
+
+      <!-- Merkle -->
+      <rect x="830" y="27" width="125" height="22" rx="4" fill="#042616" stroke="#238636" stroke-width="1"/>
+      <text x="892" y="42" fill="#3fb950" font-size="10.5" font-weight="700" text-anchor="middle">[PASS 0 DRIFT]</text>
+
+      <!-- Action -->
+      <text x="1010" y="42" fill="#3fb950" font-size="11" font-weight="700" text-anchor="middle">[PROMOTED]</text>
+    </g>
+
+    <!-- Row 2: MySQL Replicating -->
+    <g transform="translate(0, 115)">
+      <rect x="0" y="0" width="1100" height="75" fill="#1c2128" stroke="#30363d" stroke-width="0.5"/>
+      <text x="24" y="32" fill="#e6edf3" font-size="14" font-weight="700">mysql-transaction-ledger</text>
+      <text x="24" y="52" fill="#8b949e" font-size="11" font-family="monospace">finance-prod</text>
+
+      <text x="280" y="42" fill="#d0d7de" font-size="12">MySQL 8.0 &rarr; Google Cloud SQL</text>
+
+      <!-- Phase Badge -->
+      <rect x="540" y="27" width="105" height="22" rx="4" fill="#0c2d6b" stroke="#1f6feb" stroke-width="1"/>
+      <text x="592" y="42" fill="#58a6ff" font-size="10.5" font-weight="700" text-anchor="middle">[REPLICATING]</text>
+
+      <!-- Lag -->
+      <text x="698" y="42" fill="#d29922" font-size="12" font-weight="600" font-family="monospace">1s lag</text>
+
+      <!-- Merkle -->
+      <rect x="830" y="27" width="125" height="22" rx="4" fill="#042616" stroke="#238636" stroke-width="1"/>
+      <text x="892" y="42" fill="#3fb950" font-size="10.5" font-weight="700" text-anchor="middle">[PASS 0 DRIFT]</text>
+
+      <!-- Cutover Action Button -->
+      <rect x="965" y="26" width="90" height="26" rx="4" fill="#238636" stroke="#2ea043" stroke-width="1"/>
+      <text x="1010" y="43" fill="#ffffff" font-size="11" font-weight="700" text-anchor="middle">[CUTOVER]</text>
+    </g>
+
+    <!-- Row 3: MongoDB Cutover -->
+    <g transform="translate(0, 190)">
+      <rect x="0" y="0" width="1100" height="75" fill="#161b22" stroke="#30363d" stroke-width="0.5"/>
+      <text x="24" y="32" fill="#e6edf3" font-size="14" font-weight="700">mongodb-orders-cluster</text>
+      <text x="24" y="52" fill="#8b949e" font-size="11" font-family="monospace">analytics-core</text>
+
+      <text x="280" y="42" fill="#d0d7de" font-size="12">MongoDB 7.0 &rarr; MongoDB Atlas</text>
+
+      <!-- Phase Badge -->
+      <rect x="540" y="27" width="105" height="22" rx="4" fill="#382400" stroke="#9e6a03" stroke-width="1"/>
+      <text x="592" y="42" fill="#d29922" font-size="10.5" font-weight="700" text-anchor="middle">[CUTOVER]</text>
+
+      <!-- Lag -->
+      <circle cx="698" cy="38" r="3.5" fill="#3fb950"/>
+      <text x="708" y="42" fill="#3fb950" font-size="12" font-weight="600" font-family="monospace">0s (REALTIME)</text>
+
+      <!-- Merkle -->
+      <rect x="830" y="27" width="125" height="22" rx="4" fill="#042616" stroke="#238636" stroke-width="1"/>
+      <text x="892" y="42" fill="#3fb950" font-size="10.5" font-weight="700" text-anchor="middle">[PASS 0 DRIFT]</text>
+
+      <!-- Action -->
+      <rect x="965" y="26" width="90" height="26" rx="4" fill="#21262d" stroke="#30363d" stroke-width="1"/>
+      <text x="1010" y="43" fill="#c9d1d9" font-size="11" font-weight="600" text-anchor="middle">[INSPECT]</text>
+    </g>
+  </g>
+
+  <!-- Bottom Architecture & Compliance Bar -->
+  <g transform="translate(50, 580)">
+    <rect x="0" y="0" width="1100" height="42" rx="8" fill="#1c2128" stroke="#30363d" stroke-width="1"/>
+    <text x="24" y="26" fill="#8b949e" font-size="11.5">
+      <tspan font-weight="700" fill="#e6edf3">Engines:</tspan> SHA-256 Merkle Radix Tree &bull; Ghostwire Sub-50ms TCP Drain &bull; Synapse-CDC Safe Rust Ring Buffer
+    </text>
+
+    <!-- Standards Badges -->
+    <rect x="830" y="10" width="125" height="22" rx="4" fill="#0c2d6b" stroke="#1f6feb" stroke-width="1"/>
+    <text x="892" y="25" fill="#58a6ff" font-size="10" font-weight="700" text-anchor="middle">[NIST SP 800-53]</text>
+
+    <rect x="965" y="10" width="120" height="22" rx="4" fill="#271052" stroke="#8957e5" stroke-width="1"/>
+    <text x="1025" y="25" fill="#bc8cff" font-size="10" font-weight="700" text-anchor="middle">[FIPS 140-3 READY]</text>
+  </g>
+</svg>

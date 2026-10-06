@@ -1,0 +1,48 @@
+syntax = "proto3";
+
+package migration.v1;
+
+option go_package = "github.com/aegis-migrate/shared/proto/migration/v1;migrationv1";
+
+service QuiescenceCoordinator {
+  rpc AcquireQuiesceBarrier(QuiesceRequest) returns (QuiesceResponse);
+  rpc ReleaseQuiesceBarrier(ReleaseRequest) returns (ReleaseResponse);
+  rpc QueryBarrierStatus(StatusRequest) returns (BarrierStatus);
+}
+
+message QuiesceRequest {
+  string migration_id = 1;
+  string target_workload = 2;
+  int64 max_quiesce_duration_ms = 3;
+}
+
+message QuiesceResponse {
+  bool acquired = 1;
+  int64 barrier_timestamp_utc = 2;
+  string error_message = 3;
+}
+
+message ReleaseRequest {
+  string migration_id = 1;
+}
+
+message ReleaseResponse {
+  bool released = 1;
+}
+
+message StatusRequest {
+  string migration_id = 1;
+}
+
+enum BarrierState {
+  BARRIER_STATE_UNSPECIFIED = 0;
+  BARRIER_STATE_ACTIVE = 1;
+  BARRIER_STATE_QUIESCED = 2;
+  BARRIER_STATE_RELEASED = 3;
+  BARRIER_STATE_FAILED = 4;
+}
+
+message BarrierStatus {
+  BarrierState state = 1;
+  int64 in_flight_operations = 2;
+}
