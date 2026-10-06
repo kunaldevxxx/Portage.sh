@@ -7,6 +7,8 @@ target/
 dist/
 *.out
 *.test
+ghostwire
+portage-operator
 
 # OS and Editor metadata
 .DS_Store
