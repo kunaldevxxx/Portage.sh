@@ -8,10 +8,6 @@ updates:
     open-pull-requests-limit: 5
     reviewers:
       - "kunaldevxxx"
-    labels:
-      - "dependencies"
-      - "security"
-      - "go"
     groups:
       kubernetes:
         patterns:
@@ -28,9 +24,6 @@ updates:
       interval: "weekly"
     reviewers:
       - "kunaldevxxx"
-    labels:
-      - "dependencies"
-      - "ci/cd"
     groups:
       actions:
         patterns:

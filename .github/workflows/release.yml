@@ -41,7 +41,7 @@ jobs:
           go build -ldflags="-s -w -X main.version=${{ github.ref_name }}" -o ../../bin/portage-operator-${{ matrix.goos }}-${{ matrix.goarch }} ./main.go
 
       - name: "Upload Artifacts"
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
           name: binaries-${{ matrix.goos }}-${{ matrix.goarch }}
           path: bin/
@@ -55,7 +55,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: "Download All Binaries"
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@v4
         with:
           path: release-bin/
           merge-multiple: true

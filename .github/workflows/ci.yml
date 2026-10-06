@@ -40,11 +40,33 @@ jobs:
           go build -v ./...
 
       - name: "Upload Coverage Report"
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
           name: go-coverage-report
           path: tools/portage/coverage.out
           if-no-files-found: ignore
+
+  rust-ci:
+    name: "Rust Test & Lint (Synapse-CDC & Ghostwire)"
+    runs-on: ubuntu-latest
+    steps:
+      - name: "Checkout Code"
+        uses: actions/checkout@v4
+
+      - name: "Setup Rust"
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: "Cargo Check"
+        run: |
+          cd portage-enterprise-backend
+          cargo check --all-targets
+
+      - name: "Run Rust Tests"
+        run: |
+          cd portage-enterprise-backend
+          cargo test --all
 
   security-audit:
     name: "Security, Secrets & Vulnerability Audits"
