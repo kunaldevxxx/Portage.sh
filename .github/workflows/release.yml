@@ -23,10 +23,10 @@ jobs:
             goarch: arm64
     steps:
       - name: "Checkout Code"
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: "Setup Go"
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v7
         with:
           go-version: "1.22"
 
@@ -41,7 +41,7 @@ jobs:
           go build -ldflags="-s -w -X main.version=${{ github.ref_name }}" -o ../../bin/portage-operator-${{ matrix.goos }}-${{ matrix.goarch }} ./main.go
 
       - name: "Upload Artifacts"
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: binaries-${{ matrix.goos }}-${{ matrix.goarch }}
           path: bin/
@@ -52,10 +52,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: "Checkout Code"
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: "Download All Binaries"
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: release-bin/
           merge-multiple: true
@@ -67,7 +67,7 @@ jobs:
           cat SHA256SUMS.txt
 
       - name: "Create GitHub Release"
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: |
             release-bin/*
