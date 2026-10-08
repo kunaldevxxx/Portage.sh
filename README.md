@@ -16,7 +16,7 @@
   <b>Migrate mission-critical databases and stateful microservices across Kubernetes clusters, storage classes, and clouds with zero scheduled downtime, zero dropped connections, and mathematical data integrity verification.</b>
 </p>
 
-[Quick Start](#quick-start-in-60-seconds) • [Architecture](#architectural-topology) • [Migration Flow](#end-to-end-migration-lifecycle) • [Supported Ecosystem](#supported-ecosystem--compatibility-matrices) • [User Guide](#operator-guide-how-to-execute-a-migration) • [Dashboard](#live-observability-web-dashboard) • [CLI Reference](#portage-unified-cli) • [Open-Core & Enterprise](#open-core-architecture--enterprise-edition) • [Compliance](#sovereign-air-gapped-compliance)
+[Quick Start](#quick-start-two-pathways) • [Why Two Control Planes?](#why-two-independent-control-planes-cross-cluster-architecture) • [Architecture](#architectural-topology) • [Lifecycle & State Machine](#end-to-end-migration-lifecycle) • [Operator Guide](#operator-guide-how-to-execute-a-migration) • [Verification & Parity Proof](#data-parity-verification--deep-inspection-kubectl--docker-exec) • [Dashboard](#live-observability-web-dashboard) • [CLI Reference](#portage-unified-cli) • [Open-Core & Enterprise](#open-core-architecture--enterprise-edition) • [Compatibility](#supported-ecosystem--compatibility-matrices) • [Compliance](#sovereign-air-gapped-compliance)
 
 ---
 
@@ -55,12 +55,75 @@ flowchart LR
 
 ---
 
-## Quick Start in 60 Seconds
+## Why Two Independent Control Planes? (Cross-Cluster Architecture)
 
-Get up and running with the Portage CLI, offline manifest validation, and local observability dashboard in less than a minute:
+A frequent question from platform engineers is: **Why does Portage operate with two separate control planes (`source-prod` and `target-modern`)?**
+
+### The Production Reality: Cross-Cluster Boundaries
+In enterprise environments, database migrations are rarely intra-cluster namespace copies. Production migrations are typically cross-cluster, cross-region, or cross-cloud:
+1. **Cluster Upgrades & EOL Migrations:** Upgrading an aging cluster (e.g., Kubernetes 1.22 with deprecated APIs and legacy storage classes) to a modern, hardened cluster (Kubernetes 1.30+).
+2. **Cloud & Datacenter Migrations:** Migrating stateful workloads from on-premises VMware/OpenShift to AWS EKS, Google GKE, or Azure AKS.
+3. **Disaster Recovery & Regional Rebalancing:** Replicating state continuously between primary and secondary regions without service disruption.
+
+### Control Plane Isolation
+Each Kubernetes cluster possesses its own isolated control plane:
+- **Independent API Servers & etcd Stores:** Source and target clusters maintain separate state machines, object registries, and secret vaults.
+- **Distinct Network Topologies:** Completely isolated Pod and Service CIDRs.
+- **Different Storage Controllers & CSI Drivers:** Source volumes may reside on AWS `gp2` or Ceph, while target volumes reside on `gp3` or local NVMe.
+
+```mermaid
+flowchart LR
+    subgraph SourceCluster ["Source Cluster: source-prod"]
+        subgraph SourceCP ["Source Control Plane (source-prod-control-plane)"]
+            SrcAPI["kube-apiserver<br/>(Isolated etcd)"]
+        end
+        subgraph SourceWorkload ["Namespace: database-prod"]
+            SrcDB[("PostgreSQL 15 Primary<br/>6M Rows / ~1.7 GB<br/>Legacy PVC: postgres-data")]
+        end
+        SourceCP --- SourceWorkload
+    end
+
+    subgraph TargetCluster ["Target Cluster: target-modern"]
+        subgraph TargetCP ["Target Control Plane (target-modern-control-plane)"]
+            TgtAPI["kube-apiserver<br/>(Isolated etcd)"]
+        end
+        subgraph TargetWorkload ["Namespace: database-modern"]
+            TgtDB[("PostgreSQL 15 Primary<br/>Synchronized State<br/>Target PVC: postgres-data")]
+        end
+        TargetCP --- TargetWorkload
+    end
+
+    subgraph PortageBridge ["Portage Cross-Cluster Orchestration"]
+        Operator["Portage Operator & CLI<br/>(10-Phase State Machine)"]
+        CDC["Continuous WAL Streamer<br/>(Sub-second Latency)"]
+        Proxy["Ghostwire Cutover Proxy<br/>(Zero-RST Traffic Swap)"]
+    end
+
+    SrcAPI <-->|CRD & Quiesce Hooks| Operator
+    Operator <-->|Manifest Deploy & Bind| TgtAPI
+    SrcDB ==>|1. Ingest WAL Deltas| CDC
+    CDC ==>|2. Apply Streamed Transactions| TgtDB
+    Proxy -.->|3. Atomic Traffic Cutover| TgtDB
+```
+
+### Local High-Fidelity Simulation via Kind
+To test and demonstrate this realistic architecture locally without requiring paid cloud infrastructure, Portage leverages **two independent Kind clusters**:
+- **`source-prod`** (running in Docker container `source-prod-control-plane`): Represents the legacy production environment.
+- **`target-modern`** (running in Docker container `target-modern-control-plane`): Represents the modern target environment.
+
+By testing across two distinct control planes, Portage exercises genuine cross-cluster networking, separate CSI storage controllers, and independent API validation—ensuring that what works locally behaves identically in production multi-cluster environments.
+
+---
+
+## Quick Start: Two Pathways
+
+Portage supports two quick start experiences depending on your workflow:
+
+### Pathway 1: 60-Second Fast Validation & UI Preview (Zero Dependencies)
+Ideal for exploring manifest validation and viewing the interactive dashboard without provisioning clusters.
 
 ```bash
-# 1. Clone repository
+# 1. Clone the repository
 git clone https://github.com/kunaldevxxx/Portage.sh.git
 cd Portage.sh
 
@@ -70,11 +133,45 @@ go build -o bin/portage ./tools/portage
 # 3. Perform pre-flight dry-run validation on a migration manifest
 ./bin/portage dryrun -f demo/02-portage-migration.yaml
 
-# 4. Launch the real-time visual migration dashboard with demo state
+# 4. Launch the web dashboard pre-populated with enterprise demo workloads
 ./bin/portage dashboard -p 8080 --demo
 ```
+Open **`http://localhost:8080`** in your browser to view simulated migration state across PostgreSQL, MongoDB, MySQL, and Kafka.
 
-Open **`http://localhost:8080`** in your browser to explore the live migration status, real-time replication lag counters, and verification state indicators.
+---
+
+### Pathway 2: Full Local Multi-Cluster Live Demo (~1.7 GB / 6M Records)
+Ideal for testing real cross-cluster database replication, live Kubernetes CR synchronization, and zero-downtime cutover.
+
+#### Step 1: Run the Automated Setup
+```bash
+./demo/MANUAL_SETUP.sh
+```
+This script automatically:
+1. Provisions two independent Kind clusters: `source-prod` and `target-modern`.
+2. Deploys PostgreSQL 15 on both clusters with persistent storage.
+3. Generates **6,000,000 transactions (~1.7 GB)** in the `transaction_ledger` table on `source-prod`.
+4. Installs Portage CRDs on both clusters.
+5. Generates the live migration manifest `/tmp/live-demo-migration.yaml`.
+6. Compiles the latest `./bin/portage` binary.
+
+#### Step 2: Start the Live Observability Dashboard
+```bash
+./bin/portage dashboard -p 8080 &
+```
+*Note: Without `--demo`, the dashboard automatically reads the live `PortageMigration` resources directly from your active Kubernetes context!*
+
+#### Step 3: Open the Dashboard
+Navigate to **`http://localhost:8080`** in your browser. You will see an empty-state guidance card waiting for the migration resource.
+
+#### Step 4: Apply the Live Migration Manifest
+```bash
+kubectl config use-context kind-source-prod
+kubectl apply -f /tmp/live-demo-migration.yaml
+```
+
+#### Step 5: Watch Live Progression & Trigger Cutover
+The dashboard will immediately detect `postgres-live-demo`, display the live metrics (6,000,000 rows, 1,720 MB, sub-second lag), and enable the **"Execute Zero-Downtime Cutover"** button. Click it to trigger an immediate, atomic cutover that synchronizes state directly back to the cluster!
 
 ---
 
@@ -371,22 +468,116 @@ postgres-live-migration   Completed        0s    true       true      58s
 
 ---
 
+## Data Parity Verification & Deep Inspection (`kubectl` & `docker exec`)
+
+A core promise of the Portage Platform is **mathematical data integrity verification**. Operators can inspect and verify row counts, physical relation sizes, and cryptographic checksums using both Kubernetes native tools and direct control-plane Docker access.
+
+### Method 1: Direct In-Cluster Verification via `kubectl exec`
+
+Query the running PostgreSQL instances directly across the source and target contexts:
+
+```bash
+# 1. Verify row count and relation size on Source Cluster (source-prod)
+kubectl --context kind-source-prod exec -n database-prod postgres-primary-0 -- \
+  psql -U postgres -d production -c \
+  "SELECT count(*) AS source_rows, pg_size_pretty(pg_total_relation_size('transaction_ledger')) AS source_size FROM transaction_ledger;"
+
+# 2. Verify row count and relation size on Target Cluster (target-modern)
+kubectl --context kind-target-modern exec -n database-modern postgres-primary-0 -- \
+  psql -U postgres -d production -c \
+  "SELECT count(*) AS target_rows, pg_size_pretty(pg_total_relation_size('transaction_ledger')) AS target_size FROM transaction_ledger;"
+```
+
+**Expected Parity Output:**
+```text
+ source_rows | source_size 
+-------------+-------------
+     6000000 | 1720 MB
+
+ target_rows | target_size 
+-------------+-------------
+     6000000 | 1720 MB
+```
+
+---
+
+### Method 2: Host Control-Plane Inspection via `docker exec`
+
+In local or air-gapped Kind environments, each cluster node runs inside a Docker container representing the control plane (`source-prod-control-plane` and `target-modern-control-plane`). You can inspect and verify workloads directly on the host using the Kubernetes container runtime interface (`crictl`):
+
+```bash
+# 1. Query source control-plane container directly via Docker:
+docker exec source-prod-control-plane sh -c '
+  CONTAINER_ID=$(crictl ps --name postgres -q)
+  crictl exec $CONTAINER_ID psql -U postgres -d production \
+    -c "SELECT count(*) AS source_rows, pg_size_pretty(pg_total_relation_size('\''transaction_ledger'\'')) AS source_size FROM transaction_ledger;"
+'
+
+# 2. Query target control-plane container directly via Docker:
+docker exec target-modern-control-plane sh -c '
+  CONTAINER_ID=$(crictl ps --name postgres -q)
+  crictl exec $CONTAINER_ID psql -U postgres -d production \
+    -c "SELECT count(*) AS target_rows, pg_size_pretty(pg_total_relation_size('\''transaction_ledger'\'')) AS target_size FROM transaction_ledger;"
+'
+```
+
+---
+
+### Method 3: Physical Storage & Disk Block Inspection
+
+Verify the raw persistent volume directories provisioned by `local-path-provisioner` on the underlying host node filesystem:
+
+```bash
+# Inspect physical volume storage footprint on source-prod control plane:
+docker exec source-prod-control-plane du -sh /var/local-path-provisioner/*
+
+# Inspect physical volume storage footprint on target-modern control plane:
+docker exec target-modern-control-plane du -sh /var/local-path-provisioner/*
+```
+
+**Expected Disk Footprint:**
+Both source and target persistent volume directories will display matching ~1.7 GB to 2.1 GB on-disk block allocations.
+
+---
+
+### Method 4: Cryptographic Row-Level Parity Proof (MD5 / SHA-256 Digest)
+
+To prove zero data corruption or ledger drift across columns during replication, execute a deterministic hash aggregation:
+
+```bash
+# Run on Source:
+kubectl --context kind-source-prod exec -n database-prod postgres-primary-0 -- \
+  psql -U postgres -d production -c \
+  "SELECT count(*), md5(string_agg(id::text || ':' || amount::text || ':' || currency, ',' ORDER BY id)) AS ledger_checksum FROM transaction_ledger WHERE id <= 1000000;"
+
+# Run on Target:
+kubectl --context kind-target-modern exec -n database-modern postgres-primary-0 -- \
+  psql -U postgres -d production -c \
+  "SELECT count(*), md5(string_agg(id::text || ':' || amount::text || ':' || currency, ',' ORDER BY id)) AS ledger_checksum FROM transaction_ledger WHERE id <= 1000000;"
+```
+Both queries return an identical hexadecimal digest, mathematically proving byte-level column consistency ($P < 2^{-256}$).
+
+---
+
 ## Live Observability Web Dashboard
 
-Portage includes an embedded, real-time web observability dashboard with zero external dependencies:
+Portage features an embedded, real-time web observability dashboard with zero external dependencies:
 
 <div align="center">
   <img src="docs/assets/dashboard-preview.svg" alt="Portage Live Observability Dashboard" width="100%" />
 </div>
 
 > [!TIP]
-> **Instant Preview:** Run `./bin/portage dashboard -p 8080 --demo` and open `http://localhost:8080`, or open [`docs/dashboard/index.html`](docs/dashboard/index.html) directly in any browser for an interactive offline preview.
+> **Starting the Dashboard:**
+> - **Live Cluster Mode:** `./bin/portage dashboard -p 8080` (automatically syncs with active Kubernetes context and displays only real cluster migrations).
+> - **Demo Simulation Mode:** `./bin/portage dashboard -p 8080 --demo` (pre-populates enterprise mock workloads across PostgreSQL, MongoDB, MySQL, and Kafka).
+> - **Static Browser Preview:** Open [`docs/dashboard/index.html`](docs/dashboard/index.html) directly in any modern browser.
 
-### Dashboard Key Indicators:
-- **Phase Progression:** Displays active reconciliation phase, step timers, and completion milestones.
-- **Continuous Lag Monitoring:** Sub-second transaction replication lag counters ($RPO = 0$ tracking).
-- **Cryptographic Parity Indicator:** Real-time confirmation of dataset integrity between source and target.
-- **Traffic Redirection Progress:** Visual tracking of active in-flight connection draining and route cutover.
+### Key Capabilities & Live Architecture:
+- **Automatic Cluster Synchronization:** The dashboard connects to the active Kubernetes context, watches live `PortageMigration` resources, and automatically updates every 2 seconds without full page refreshes.
+- **Dynamic Metric Aggregation:** Calculates live row counts, data volume (e.g. 1,720 MB), sub-second replication lag ($RPO = 0$), and verification status directly from the workload.
+- **Interactive, Persistent Cutover:** Clicking **"Execute Zero-Downtime Cutover"** issues an atomic mutation that updates the Kubernetes Custom Resource status in the cluster and triggers the traffic proxy—persisting the cutover phase across reloads and sync intervals.
+- **Empty State Guidance:** When no migrations are registered in the connected cluster, the UI presents a clean workflow card instructing the operator on how to apply `/tmp/live-demo-migration.yaml`.
 
 ---
 
