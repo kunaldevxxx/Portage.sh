@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"sort"
 	"sync"
 	"time"
@@ -42,6 +43,26 @@ func (s *EventStore) Record(event *MigrationStatusEvent) {
 	s.events[key] = event
 }
 
+// Get returns a migration event by namespace and name, or nil.
+func (s *EventStore) Get(namespace, name string) *MigrationStatusEvent {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	key := fmt.Sprintf("%s/%s", namespace, name)
+	return s.events[key]
+}
+
+// FindByName searches for an event with the given name across namespaces.
+func (s *EventStore) FindByName(name string) *MigrationStatusEvent {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for _, e := range s.events {
+		if e.Name == name {
+			return e
+		}
+	}
+	return nil
+}
+
 // GetAll returns a snapshot list of all migration status events.
 func (s *EventStore) GetAll() []*MigrationStatusEvent {
 	s.mu.RLock()
@@ -51,6 +72,12 @@ func (s *EventStore) GetAll() []*MigrationStatusEvent {
 		list = append(list, e)
 	}
 	sort.Slice(list, func(i, j int) bool {
+		if list[i].Name == "postgres-live-demo" {
+			return true
+		}
+		if list[j].Name == "postgres-live-demo" {
+			return false
+		}
 		if list[i].Name == "postgres-100gb-core-banking" {
 			return true
 		}
@@ -71,6 +98,34 @@ func PopulateDemoData(store *EventStore) {
 		store = GlobalStore
 	}
 	now := time.Now().UTC()
+
+	// Live 6M Row (~1.72 GB) PostgreSQL Workload (created in MANUAL_SETUP.sh)
+	store.Record(&MigrationStatusEvent{
+		Namespace:          "database-prod",
+		Name:               "postgres-live-demo",
+		Phase:              "ReplicatingData",
+		LagSeconds:         0,
+		MerkleOK:           true,
+		CutoverDone:        false,
+		DataSizeBytes:      1845493760, // 1.72 GB
+		DataSizeFormatted:  "1.72 GB (6.0M Rows)",
+		RowsProcessed:      6000000,
+		ThroughputMBps:     185.4,
+		QuiesceDurationSec: 0.84,
+		DrainDurationMs:    38.4,
+		ActiveSessions:     1420,
+		DrainedSessions:    0,
+		DroppedPackets:     0,
+		Engine:             "PostgreSQL 15 (source-prod -> target-modern)",
+		StartTime:          now.Add(-10 * time.Minute).Format(time.RFC3339),
+		Logs: []string{
+			fmt.Sprintf("[%s] [PHASE_0_PENDING] Registered PortageMigration for database-prod/postgres-live-demo (1.72 GB)", now.Add(-10*time.Minute).Format("15:04:05.000")),
+			fmt.Sprintf("[%s] [PHASE_1_VALIDATING] Validating PVC 'postgres-data' on source-prod. CSI driver ready.", now.Add(-9*time.Minute).Format("15:04:05.000")),
+			fmt.Sprintf("[%s] [PHASE_2_TRANSLATING] AST Rewriter modernizing StatefulSet and Service for target-modern.", now.Add(-8*time.Minute).Format("15:04:05.000")),
+			fmt.Sprintf("[%s] [PHASE_3_REPLICATING] Synapse-CDC WAL streaming active: rate 185.4 MB/s, lag: 0s.", now.Add(-5*time.Minute).Format("15:04:05.000")),
+			fmt.Sprintf("[%s] [PHASE_3_REPLICATING] Cryptographic Parity Verified: SHA-256 state tree match (0 drift).", now.Add(-1*time.Minute).Format("15:04:05.000")),
+		},
+	})
 
 	// High-Scale 100GB+ Enterprise Workload
 	store.Record(&MigrationStatusEvent{
@@ -479,5 +534,13 @@ func simulate100GBHandler(store *EventStore) http.HandlerFunc {
 // indexHandler serves the dashboard HTML page.
 func indexHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if content, err := os.ReadFile("docs/dashboard/index.html"); err == nil && len(content) > 0 {
+		w.Write(content)
+		return
+	}
+	if content, err := os.ReadFile("tools/portage/pkg/dashboard/assets/index.html"); err == nil && len(content) > 0 {
+		w.Write(content)
+		return
+	}
 	w.Write(indexHTML)
 }

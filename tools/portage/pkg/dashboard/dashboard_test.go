@@ -102,7 +102,7 @@ func TestPopulateDemoData(t *testing.T) {
 	store := NewEventStore()
 	PopulateDemoData(store)
 	events := store.GetAll()
-	if len(events) != 4 {
-		t.Fatalf("expected 4 demo migrations (including 100GB enterprise shard), got %d", len(events))
+	if len(events) != 5 {
+		t.Fatalf("expected 5 demo migrations (including live demo & 100GB enterprise shard), got %d", len(events))
 	}
 }
