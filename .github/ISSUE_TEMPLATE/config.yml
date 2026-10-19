@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: "Security Vulnerability Report"
+    url: "https://github.com/kunaldevxxx/Portage.sh/blob/main/SECURITY.md"
+    about: "Report security vulnerabilities directly to the security team under our private disclosure policy."

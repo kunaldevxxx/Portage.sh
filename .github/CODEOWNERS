@@ -1,0 +1,35 @@
+# ==============================================================================
+# Enterprise CODEOWNERS Policy
+# ==============================================================================
+# This repository enforces strict code ownership. Direct pushes to protected
+# branches (e.g. main/master) are blocked. Every Pull Request must be reviewed
+# and explicitly approved by the repository owner before merging.
+#
+# Primary Owner: @kunaldevxxx
+# ==============================================================================
+
+# Global fallback: All files require review by the owner
+* @kunaldevxxx
+
+# CI/CD pipelines, workflows, and security policies
+/.github/ @kunaldevxxx
+/.github/workflows/ @kunaldevxxx
+/SECURITY.md @kunaldevxxx
+
+# Tool 1: Portage.sh Kubernetes Operator
+/tools/portage/ @kunaldevxxx
+/tools/portage/api/ @kunaldevxxx
+/tools/portage/controllers/ @kunaldevxxx
+/tools/portage/pkg/ @kunaldevxxx
+
+# Tool 2: Synapse-CDC Engine
+/tools/synapse-cdc/ @kunaldevxxx
+
+# Tool 3: Ghostwire Cutover Director
+/tools/ghostwire/ @kunaldevxxx
+
+# Shared schemas and protocols
+/shared/ @kunaldevxxx
+
+# Demos and automated verification harnesses
+/demo/ @kunaldevxxx

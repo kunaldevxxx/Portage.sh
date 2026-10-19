@@ -1,0 +1,18 @@
+# Private enterprise repository
+portage-enterprise-backend/
+
+# Binaries and build artifacts
+bin/
+target/
+dist/
+*.out
+*.test
+ghostwire
+portage-operator
+
+# OS and Editor metadata
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*~

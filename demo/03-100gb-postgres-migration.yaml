@@ -1,0 +1,77 @@
+apiVersion: migration.portage.sh/v1alpha1
+kind: PortageMigration
+metadata:
+  name: postgres-100gb-core-banking
+  namespace: database-prod
+spec:
+  # Source 100GB+ High-Scale StatefulSet & 128Gi PVC
+  sourceWorkload:
+    kind: StatefulSet
+    name: postgres-100gb-primary
+  sourceNamespace: database-prod
+  targetNamespace: database-modern-prod
+
+  # Sub-Second Database Quiescence Hooks (< 1.0s write lock duration)
+  preQuiesceHooks:
+    - name: postgres-checkpoint-and-lock
+      type: PodExec
+      timeoutSeconds: 30
+      maxRetries: 3
+      podExec:
+        selector:
+          matchLabels:
+            app.kubernetes.io/name: postgres-100gb
+        command:
+          - psql
+          - -U
+          - postgres
+          - -c
+          - "CHECKPOINT; SELECT pg_backup_start('portage_100gb_quiesce', true);"
+
+  postQuiesceHooks:
+    - name: postgres-unlock
+      type: PodExec
+      timeoutSeconds: 30
+      maxRetries: 3
+      podExec:
+        selector:
+          matchLabels:
+            app.kubernetes.io/name: postgres-100gb
+        command:
+          - psql
+          - -U
+          - postgres
+          - -c
+          - "SELECT pg_backup_stop();"
+
+  # Data Plane: Continuous WAL Streaming (Synapse-CDC) with SHA-256 Parity Proofs
+  cdcReplication:
+    driver: enterprise-synapse
+    enabled: true
+    endpoint: "http://synapse-cdc.migration.svc:9000"
+    streamID: "postgres-100gb-wal-stream"
+    requireMerkleVerification: true
+    maxAllowedLagSeconds: 2
+
+  # Traffic Plane: Zero-Loss L4 Cutover Proxy (Ghostwire) with Connection Draining
+  trafficCutover:
+    driver: enterprise-ghostwire
+    enabled: true
+    directorEndpoint: "http://ghostwire.migration.svc:8000"
+    routeID: "postgres-100gb-db-route"
+    targetEndpoint: "postgres-100gb-svc.database-modern-prod.svc:5432"
+    drainTimeoutSeconds: 30
+
+  # Storage Plane: 128Gi CSI Snapshotting & Modern NVMe StorageClass remapping
+  volumeMigration:
+    volumeSnapshotClassName: csi-aws-vsc
+    targetStorageClassName: gp3-nvme-encrypted
+    persistentVolumeClaimNames:
+      - data-postgres-100gb-primary-0
+    retainOnSource: true
+
+  # AST API Translation: Automated in-flight manifest modernization
+  translationRules:
+    - sourceAPIVersion: "extensions/v1beta1"
+      targetAPIVersion: "networking.k8s.io/v1"
+      kind: "Ingress"
